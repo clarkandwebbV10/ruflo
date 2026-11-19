@@ -1,4 +1,6 @@
-name: 🔗 Cross-Agent Integration Tests
+name: 🔗 SYNTHETIC Cross-Agent Integration Exercises (NOT live acceptance)
+# PROVENANCE: This workflow generates random fixture values, not real agent measurements.
+# It must never be used as evidence of live reliability, performance, or production readiness.
 
 on:
   push:
@@ -206,6 +208,8 @@ jobs:
           node -e "
           async function testCommunication() {
             const results = {
+              evidenceType: 'synthetic_fixture',
+              verifiedRuntime: false,
               agentType: '${{ matrix.type }}',
               agentCount: ${{ matrix.count }},
               communicationTests: [],
@@ -238,6 +242,8 @@ jobs:
           node -e "
           async function testTaskDistribution() {
             const results = {
+              evidenceType: 'synthetic_fixture',
+              verifiedRuntime: false,
               agentType: '${{ matrix.type }}',
               agentCount: ${{ matrix.count }},
               taskDistribution: {
@@ -324,6 +330,8 @@ jobs:
           node -e "
           async function testSharedMemory() {
             const results = {
+              evidenceType: 'synthetic_fixture',
+              verifiedRuntime: false,
               sessionId: '${{ needs.integration-setup.outputs.test-session-id }}',
               memoryTests: [],
               timestamp: new Date().toISOString()
@@ -374,6 +382,8 @@ jobs:
           node -e "
           async function testMemorySync() {
             const results = {
+              evidenceType: 'synthetic_fixture',
+              verifiedRuntime: false,
               syncTests: [],
               conflictResolution: [],
               consistencyCheck: {
@@ -440,6 +450,8 @@ jobs:
           node -e "
           async function testFailureRecovery() {
             const results = {
+              evidenceType: 'synthetic_fixture',
+              verifiedRuntime: false,
               failureTests: [],
               recoveryMetrics: {
                 averageRecoveryTime: 0,
@@ -498,6 +510,8 @@ jobs:
           node -e "
           async function testResilience() {
             const results = {
+              evidenceType: 'synthetic_fixture',
+              verifiedRuntime: false,
               loadTests: [],
               systemMetrics: {
                 maxConcurrentAgents: 0,
@@ -568,6 +582,8 @@ jobs:
           node -e "
           async function testPerformance() {
             const results = {
+              evidenceType: 'synthetic_fixture',
+              verifiedRuntime: false,
               performanceTests: [],
               benchmarks: {
                 taskThroughput: 0,
@@ -624,6 +640,8 @@ jobs:
           node -e "
           async function testScalability() {
             const results = {
+              evidenceType: 'synthetic_fixture',
+              verifiedRuntime: false,
               scalabilityTests: [],
               limits: {
                 maxAgents: 0,
@@ -716,6 +734,9 @@ jobs:
           
           async function generateReport() {
             const report = {
+              evidenceType: 'synthetic_fixture_report',
+              verifiedRuntimeIntegration: false,
+              evidenceLimitations: 'Randomized fixtures and artifact presence; live agent behavior was not measured.',
               sessionId: '${{ needs.integration-setup.outputs.test-session-id }}',
               timestamp: new Date().toISOString(),
               summary: {
@@ -773,6 +794,7 @@ jobs:
             
             report.summary.failedTests = report.summary.totalTests - report.summary.passedTests;
             report.summary.overallSuccess = report.summary.failedTests === 0;
+            report.summary.validationScope = 'artifact_presence_only';
             
             // Generate recommendations
             if (report.testResults.coordination.status !== 'passed') {
@@ -792,18 +814,21 @@ jobs:
             
             // Generate markdown report
             const markdown = \`
-          # 🔗 Cross-Agent Integration Test Report
+          # ⚠️ SYNTHETIC Cross-Agent Exercise Report (NOT Live Acceptance)
+
+          **Evidence class:** SYNTHETIC FIXTURES. Random output values are not live-agent measurements.
+          **Live integration verified:** NO. Artifact presence alone does not validate behavior.
           
           **Session ID:** \${report.sessionId}
           **Timestamp:** \${report.timestamp}
-          **Overall Status:** \${report.summary.overallSuccess ? '✅ PASSED' : '❌ FAILED'}
+          **Fixture artifact status:** \${report.summary.overallSuccess ? '✅ PASSED' : '❌ FAILED'}
           
           ## Summary
           
           - **Total Tests:** \${report.summary.totalTests}
           - **Passed:** \${report.summary.passedTests}
           - **Failed:** \${report.summary.failedTests}
-          - **Success Rate:** \${((report.summary.passedTests / report.summary.totalTests) * 100).toFixed(1)}%
+          - **Fixture artifact availability rate:** \${((report.summary.passedTests / report.summary.totalTests) * 100).toFixed(1)}%
           
           ## Test Results
           
@@ -816,16 +841,16 @@ jobs:
           
           ## Recommendations
           
-          \${report.recommendations.length > 0 ? report.recommendations.map(r => \`- \${r}\`).join('\\n') : '- All integration tests passed successfully!'}
+          \${report.recommendations.length > 0 ? report.recommendations.map(r => \`- \${r}\`).join('\\n') : '- All expected synthetic fixture artifacts were present; live integration remains unverified.'}
           
           ## Next Steps
           
           1. Review detailed test artifacts
           2. Address any failed test scenarios
-          3. Monitor integration performance in production
+          3. Replace synthetic values with instrumented observations before making production performance claims
           
           ---
-          *Generated by Cross-Agent Integration Test Pipeline*
+          *Generated by a synthetic fixture exercise, NOT an integration acceptance gate.*
           \`;
             
             fs.writeFileSync('final-report/integration-test-report.md', markdown);
@@ -860,7 +885,7 @@ jobs:
                 issue_number: context.issue.number,
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                body: `## 🔗 Integration Test Results\n\n${report}`
+                body: `## ⚠️ Simulated Integration Fixtures (NOT live acceptance)\n\n${report}`
               });
             } catch (e) {
               console.log('Could not post integration test results to PR');
@@ -878,7 +903,7 @@ jobs:
               echo "❌ Integration tests failed"
               exit 1
             else
-              echo "✅ Integration tests passed"
+              echo "✅ Synthetic fixture artifacts produced; live integration NOT verified"
             fi
           else
             echo "⚠️ Could not determine integration test status"
