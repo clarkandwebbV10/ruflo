@@ -14,9 +14,9 @@ permissions:
 
 jobs:
   smoke-evidence-gate:
-    name: Regression — fail closed on test failure or timeout
+    name: Regression — fail closed on rollback smoke/build failure
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Verify rollback smoke failure propagation without dependency install
+      - name: Verify rollback smoke and build failure propagation without dependency install
         run: node --test tests/rollback-smoke-verification.test.cjs
