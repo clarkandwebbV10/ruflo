@@ -17,6 +17,8 @@ test('JSON summary states the exact limited verification scope', () => {
   assert.match(workflow, /evidenceType: 'synthetic_fixture_report'/);
   assert.match(workflow, /verifiedRuntimeIntegration: false/);
   assert.match(workflow, /report\.summary\.validationScope = 'artifact_presence_only'/);
+  assert.match(workflow, /fixtureEvidenceGate\(report\.summary, report\.upstreamJobResults\)/);
+  assert.match(workflow, /setup: '\$\{\{ needs\.integration-setup\.result \}\}'/);
 });
 
 test('human-readable and PR-facing reports cannot claim live acceptance', () => {
