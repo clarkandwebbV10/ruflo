@@ -9,11 +9,25 @@ on:
   schedule:
     - cron: '0 6 * * *'  # Daily at 6 AM UTC
 
+permissions:
+  contents: write
+
+# At most one badge writer should run concurrently; avoid stale push races.
+concurrency:
+  group: status-badges-main
+  cancel-in-progress: true
+
 jobs:
   update-badges:
     name: 📊 Update Status Badges
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
+    # workflow_run executes in the default-branch context even when the triggering
+    # pipeline tested a PR. Only reflect trusted main-branch results in main badges.
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      (github.event_name != 'workflow_run' ||
+      (github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.full_name == github.repository))
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -26,14 +40,17 @@ jobs:
           node-version: '20'
 
       - name: Generate badge data
+        env:
+          # Treat workflow event metadata as data, never shell source.
+          VERIFICATION_STATUS: ${{ github.event.workflow_run.conclusion || 'unknown' }}
+          WORKFLOW_NAME: ${{ github.event.workflow_run.name || 'unknown' }}
         run: |
           echo "📊 Generating badge data..."
           
           mkdir -p badge-data
           
           # Get latest workflow runs
-          VERIFICATION_STATUS="${{ github.event.workflow_run.conclusion || 'unknown' }}"
-          WORKFLOW_NAME="${{ github.event.workflow_run.name || 'unknown' }}"
+          # Values are provided through step env to avoid shell interpolation.
           
           # Determine badge colors and status
           case "$VERIFICATION_STATUS" in
