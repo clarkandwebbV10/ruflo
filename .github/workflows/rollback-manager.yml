@@ -262,7 +262,8 @@ jobs:
           npm ci --legacy-peer-deps
 
           echo "Testing build..."
-          npm run build:ts
+          # Invoke the CLI build directly; root build:ts masks failures with || true.
+          npm --prefix v3/@claude-flow/cli run build
 
           # Switch back to original branch
           git checkout "${{ github.ref_name }}"
@@ -428,10 +429,12 @@ jobs:
 
       - name: Verify build functionality
         run: |
+          set -euo pipefail
           echo "🔍 Verifying build functionality..."
           
           # Test basic build
-          npm run build:ts || (echo "❌ Build failed after rollback" && exit 1)
+          # Root build:ts contains '|| true' and cannot be used as an acceptance gate.
+          npm --prefix v3/@claude-flow/cli run build
           
           echo "✅ Build verification passed"
 
