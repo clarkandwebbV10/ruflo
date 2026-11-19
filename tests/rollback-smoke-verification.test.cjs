@@ -115,3 +115,41 @@ for (const [exitCode, expected] of [[0, 0], [1, 1], [124, 124]]) {
     }
   });
 }
+
+
+function rollbackReportTemplate() {
+  const marker = 'cat > rollback-reports/rollback-report.json << EOF';
+  const start = workflow.indexOf(marker);
+  assert.ok(start >= 0, 'rollback JSON report generator must exist');
+  const lines = workflow.slice(start + marker.length).split(/\r?\n/);
+  const body = [];
+  for (const line of lines.slice(1)) {
+    if (line.trim() === 'EOF') break;
+    body.push(line.trimStart());
+  }
+  return body.join('\n');
+}
+
+test('SEC-019: rollback report parses and explicitly declines unsupported health claims', () => {
+  const raw = rollbackReportTemplate()
+    .replace(/\$\{\{[^}]+\}\}/g, 'placeholder')
+    .replace(/\$\(date[^)]*\)/g, '2026-11-19T00:00:00Z');
+  const report = JSON.parse(raw);
+  assert.equal(report.verification.liveRuntimeVerified, false);
+  assert.equal(report.monitoring.configured, false);
+  assert.equal(report.monitoring.runtimeMetricsCollected, false);
+  assert.equal(report.monitoring.systemStable, null);
+  assert.equal(report.monitoring.issuesDetected, null);
+  assert.equal(report.monitoring.status, 'not_verified');
+  assert.match(report.status, /unverified/);
+  assert.equal(report.verification.postRollbackJobResult, 'placeholder');
+});
+
+test('SEC-019: report, workflow logs and issue notification do not invent monitoring results', () => {
+  assert.doesNotMatch(workflow, /"systemStable":\s*true/);
+  assert.doesNotMatch(workflow, /"issuesDetected":\s*0/);
+  assert.doesNotMatch(workflow, /system appears stable|system is now stable|Monitoring completed successfully/);
+  assert.doesNotMatch(workflow, /Simulate monitoring|sleep 30  # Short monitoring/);
+  assert.match(workflow, /No live runtime probes or deployed health metrics are configured/);
+  assert.match(workflow, /live runtime health unverified/);
+});
