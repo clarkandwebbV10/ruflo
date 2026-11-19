@@ -1,0 +1,22 @@
+name: Rollback smoke-evidence gate
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/rollback-manager.yml'
+      - '.github/workflows/rollback-smoke-evidence-gate.yml'
+      - 'tests/rollback-smoke-verification.test.cjs'
+      - 'package.json'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke-evidence-gate:
+    name: Regression — fail closed on test failure or timeout
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify rollback smoke failure propagation without dependency install
+        run: node --test tests/rollback-smoke-verification.test.cjs
