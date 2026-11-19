@@ -1,0 +1,23 @@
+name: 🔎 Integration evidence provenance regression
+on:
+  pull_request:
+    paths:
+      - .github/workflows/integration-tests.yml
+      - .github/workflows/integration-evidence-provenance.yml
+      - tests/integration-evidence-provenance.test.cjs
+      - tests/integration-report-gate.test.cjs
+      - scripts/integration-report-evidence-gate.cjs
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  provenance-check:
+    name: Node built-in provenance tests (no npm install)
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify simulated metrics are labeled in every output and report
+        run: node --test tests/integration-evidence-provenance.test.cjs tests/integration-report-gate.test.cjs
