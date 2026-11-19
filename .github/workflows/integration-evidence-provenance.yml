@@ -5,6 +5,8 @@ on:
       - .github/workflows/integration-tests.yml
       - .github/workflows/integration-evidence-provenance.yml
       - tests/integration-evidence-provenance.test.cjs
+      - tests/integration-report-gate.test.cjs
+      - scripts/integration-report-evidence-gate.cjs
   workflow_dispatch:
 
 permissions:
@@ -18,4 +20,4 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Verify simulated metrics are labeled in every output and report
-        run: node --test tests/integration-evidence-provenance.test.cjs
+        run: node --test tests/integration-evidence-provenance.test.cjs tests/integration-report-gate.test.cjs
