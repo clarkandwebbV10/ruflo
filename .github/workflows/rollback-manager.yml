@@ -437,12 +437,10 @@ jobs:
 
       - name: Run smoke tests
         run: |
-          echo "🧪 Running smoke tests..."
-          
-          # Run basic tests to ensure functionality
-          timeout 120s npm run test:unit || echo "⚠️ Some tests failed"
-          
-          echo "✅ Smoke tests completed"
+          set -euo pipefail
+          echo "🧪 Running rollback smoke tests (vitest)..."
+          timeout 120s npm run test -- --run
+          echo "✅ Rollback smoke tests passed"
 
       - name: Verify CLI functionality
         run: |
