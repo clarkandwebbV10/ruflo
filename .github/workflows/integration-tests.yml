@@ -30,7 +30,7 @@ on:
         default: '10'
 
 env:
-  NODE_VERSION: '20'
+  NODE_VERSION: '22.23.5'
   MAX_PARALLEL_AGENTS: 8
   DEFAULT_TIMEOUT: 300000
   INTEGRATION_DB_PATH: './integration-test.db'
