@@ -36,9 +36,18 @@ test('SEC-021 payload in dispatch reason stays inert in real rollback shell bloc
  const target=git('rev-parse','HEAD');fs.writeFileSync(path.join(dir,'later'),'later');git('add','-A');git('commit','-qm','newer');const latest=git('rev-parse','HEAD');
  const values={'github.actor':'CI','github.sha':latest,'github.ref_name':'main',"needs.failure-detection.outputs.rollback-session-id || 'manual'":'ci-session'};
  let run=script('Execute rollback').replace(/\x24{{\s*([^}]+)\s*}}/g,(_,key)=>{key=key.trim();assert.ok(Object.hasOwn(values,key),'Unexpected expression '+key);return values[key]});
- // A temporary script avoids Windows Git Bash rewriting multi-line -c arguments.
- fs.writeFileSync(path.join(dir,'rollback-test.sh'),run,'utf8');
- const r=spawnSync('bash',['-e','./rollback-test.sh'],{cwd:dir,encoding:'utf8',env:{...process.env,GITHUB_OUTPUT:output,MC2_ROLLBACK_TARGET:target,MC2_ROLLBACK_REASON:reason,MC2_ROLLBACK_SCOPE:'application',MC2_EMERGENCY_MODE:'false'}});
+ // Pass hostile text as a literal shell variable: no eval or command substitution.
+ // POSIX-relative output avoids Windows Git Bash redirect-path translation.
+ const shellQuote = value => "'" + value.replaceAll("'", "'\\''") + "'";
+ const setup = [
+  'export GITHUB_OUTPUT=./out.txt',
+  'export MC2_ROLLBACK_TARGET=' + shellQuote(target),
+  'export MC2_ROLLBACK_REASON=' + shellQuote(reason),
+  'export MC2_ROLLBACK_SCOPE=application',
+  'export MC2_EMERGENCY_MODE=false',
+ ].join('\n');
+ fs.writeFileSync(path.join(dir,'rollback-test.sh'),setup+'\n'+run,'utf8');
+ const r=spawnSync('bash',['-e','./rollback-test.sh'],{cwd:dir,encoding:'utf8'});
  assert.equal(r.status,0,r.stderr+'\n'+r.stdout);
  assert.equal(fs.existsSync(sentinel),false,'Shell injection executed');
  assert.equal(git('rev-parse','HEAD^'),latest,'Must preserve ancestry');
