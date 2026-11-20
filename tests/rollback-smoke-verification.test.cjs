@@ -178,6 +178,9 @@ test('SEC-020: rollback produces a new descendant commit without erasing history
     git('add', '-A');
     git('commit', '-qm', 'latest state');
     const originalHead = git('rev-parse', 'HEAD');
+    // Validation backup artifacts are downloaded into this runner and MUST stay untracked.
+    fs.mkdirSync(path.join(tmpDir, 'rollback-data', 'backup'), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, 'rollback-data', 'backup', 'fixture-private-backup.txt'), 'do not commit\n');
 
     // Substitute only known GitHub context fields in the real workflow run block.
     const replacements = {
@@ -208,6 +211,8 @@ test('SEC-020: rollback produces a new descendant commit without erasing history
     assert.equal(fs.readFileSync(path.join(tmpDir, 'stable.txt'), 'utf8'), 'safe baseline\n');
     assert.equal(fs.existsSync(path.join(tmpDir, 'later.txt')), false);
     assert.equal(fs.existsSync(path.join(tmpDir, 'ROLLBACK_INFO.md')), true);
+    assert.equal(git('ls-files', 'rollback-data'), '', 'untracked validation backups must not enter rollback commit');
+    assert.equal(fs.existsSync(path.join(tmpDir, 'rollback-data', 'backup', 'fixture-private-backup.txt')), true);
     assert.match(fs.readFileSync(outputFile, 'utf8'), /rollback-executed=true/);
     assert.match(fs.readFileSync(outputFile, 'utf8'), /rollback-commit=[a-f0-9]{40}/);
   } finally {
