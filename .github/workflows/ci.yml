@@ -27,6 +27,9 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
 
+      - name: Verify shared CI Node security patch floor
+        run: node --test tests/ci-supported-node.test.cjs
+
       - name: Install dependencies
         uses: ./.github/actions/npm-ci-retry
 
