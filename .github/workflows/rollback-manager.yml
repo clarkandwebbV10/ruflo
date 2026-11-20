@@ -32,6 +32,10 @@ on:
           - infrastructure
           - full
 
+# Conservative default for workflow_run, push and manual dispatch jobs.
+permissions:
+  contents: read
+
 env:
   NODE_VERSION: '20'
   ROLLBACK_RETENTION_DAYS: 90
@@ -281,6 +285,9 @@ jobs:
   execute-rollback:
     name: 🔄 Execute Rollback
     runs-on: ubuntu-latest
+    # Only this environment-gated job needs to create commits/tags.
+    permissions:
+      contents: write
     needs: [failure-detection, pre-rollback-validation]
     if: needs.pre-rollback-validation.outputs.validation-passed == 'true' && (needs.failure-detection.outputs.failure-severity == 'high' || github.event.inputs.emergency_mode == 'true' || github.event_name == 'workflow_dispatch')
     environment: 
@@ -512,6 +519,10 @@ jobs:
   rollback-monitoring:
     name: 📊 Rollback Monitoring
     runs-on: ubuntu-latest
+    # Read artifacts/source and open an incident issue; no repository writes.
+    permissions:
+      contents: read
+      issues: write
     needs: [failure-detection, execute-rollback, post-rollback-verification]
     if: needs.execute-rollback.outputs.rollback-executed == 'true'
     steps:
