@@ -153,3 +153,73 @@ test('SEC-019: report, workflow logs and issue notification do not invent monito
   assert.match(workflow, /No live runtime probes or deployed health metrics are configured/);
   assert.match(workflow, /live runtime health unverified/);
 });
+
+
+ 
+test('SEC-020: rollback produces a new descendant commit without erasing history', () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc2-rollback-history-'));
+  const outputFile = path.join(os.tmpdir(), 'mc2-rollback-outputs-' + process.pid + '-' + Date.now());
+  function git(...args) {
+    const result = spawnSync('git', args, { cwd: tmpDir, encoding: 'utf8' });
+    assert.equal(result.status, 0, 'git ' + args.join(' ') + ': ' + result.stderr);
+    return result.stdout.trim();
+  }
+  try {
+    git('init', '-q', '-b', 'main');
+    git('config', 'user.name', 'MC2 CI Test');
+    git('config', 'user.email', 'ci-test@example.invalid');
+    fs.writeFileSync(path.join(tmpDir, 'stable.txt'), 'safe baseline\n');
+    git('add', '-A');
+    git('commit', '-qm', 'baseline');
+    const target = git('rev-parse', 'HEAD');
+
+    fs.rmSync(path.join(tmpDir, 'stable.txt'));
+    fs.writeFileSync(path.join(tmpDir, 'later.txt'), 'changed state\n');
+    git('add', '-A');
+    git('commit', '-qm', 'latest state');
+    const originalHead = git('rev-parse', 'HEAD');
+
+    // Substitute only known GitHub context fields in the real workflow run block.
+    const replacements = {
+      'github.event.inputs.rollback_target || needs.failure-detection.outputs.rollback-target': target,
+      "github.event.inputs.rollback_reason || 'Automated rollback due to CI failure'": 'CI failure test',
+      'github.actor': 'mc2-test',
+      'github.sha': originalHead,
+      'github.ref_name': 'main',
+      "needs.failure-detection.outputs.rollback-session-id || 'manual'": 'test-session',
+      "github.event.inputs.rollback_scope || 'application'": 'application',
+      "github.event.inputs.emergency_mode || 'false'": 'false',
+    };
+    const script = namedStepScript('Execute rollback').replace(/[$][{][{]([^}]+)[}][}]/g, (_, key) => {
+      const k = key.trim();
+      assert.ok(Object.hasOwn(replacements, k), 'unexpected GitHub expression: ' + k);
+      return replacements[k];
+    });
+    const result = spawnSync('bash', ['-e', '-c', script], {
+      cwd: tmpDir,
+      encoding: 'utf8',
+      env: { ...process.env, GITHUB_OUTPUT: outputFile },
+    });
+    assert.equal(result.status, 0, result.stderr + '\n' + result.stdout);
+    const rollbackHead = git('rev-parse', 'HEAD');
+    assert.notEqual(rollbackHead, originalHead);
+    assert.equal(git('rev-parse', 'HEAD^'), originalHead, 'new rollback must preserve previous branch tip as parent');
+    git('merge-base', '--is-ancestor', originalHead, rollbackHead);
+    assert.equal(fs.readFileSync(path.join(tmpDir, 'stable.txt'), 'utf8'), 'safe baseline\n');
+    assert.equal(fs.existsSync(path.join(tmpDir, 'later.txt')), false);
+    assert.equal(fs.existsSync(path.join(tmpDir, 'ROLLBACK_INFO.md')), true);
+    assert.match(fs.readFileSync(outputFile, 'utf8'), /rollback-executed=true/);
+    assert.match(fs.readFileSync(outputFile, 'utf8'), /rollback-commit=[a-f0-9]{40}/);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(outputFile, { force: true });
+  }
+});
+
+test('SEC-020: push step rejects non-fast-forward and never force-pushes', () => {
+  const step = namedStepScript('Push rollback commit');
+  assert.match(step, /git push origin HEAD:/);
+  assert.doesNotMatch(step, /--force(?:-with-lease)?|git push[^\n]*\s-f\b/);
+  assert.doesNotMatch(workflow, /git reset --hard "\$ROLLBACK_TARGET"/);
+  assert.match(namedStepScript('Execute rollback'), /git restore --source="\$ROLLBACK_TARGET" --staged --worktree -- \./);
+});
