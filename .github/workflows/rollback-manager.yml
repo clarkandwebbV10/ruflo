@@ -43,7 +43,9 @@ jobs:
   failure-detection:
     name: 🚨 Failure Detection
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_run' || github.event_name == 'push'
+    # workflow_run runs at the default branch ref, not necessarily the upstream CI ref.
+    # Do not auto-rollback main for failed develop or stale workflow runs.
+    if: github.event_name == 'push' || (github.event_name == 'workflow_run' && github.event.workflow_run.head_branch == github.ref_name && github.event.workflow_run.head_sha == github.sha)
     outputs:
       rollback-required: ${{ steps.detect.outputs.rollback-required }}
       failure-type: ${{ steps.detect.outputs.failure-type }}
