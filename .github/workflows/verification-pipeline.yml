@@ -42,12 +42,15 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
 
+      - name: Verify security-patched Node test matrix
+        run: node --test tests/verification-matrix-supported-node.test.cjs
+
       - name: Generate verification ID
         id: setup
         run: |
           VERIFICATION_ID="verify-$(date +%Y%m%d-%H%M%S)-${{ github.sha }}"
           echo "verification-id=$VERIFICATION_ID" >> $GITHUB_OUTPUT
-          echo "test-matrix={\"include\":[{\"os\":\"ubuntu-latest\",\"node\":\"18\"},{\"os\":\"ubuntu-latest\",\"node\":\"20\"},{\"os\":\"macos-latest\",\"node\":\"20\"},{\"os\":\"windows-latest\",\"node\":\"20\"}]}" >> $GITHUB_OUTPUT
+          echo "test-matrix={\"include\":[{\"os\":\"ubuntu-latest\",\"node\":\"22.23.5\"},{\"os\":\"ubuntu-latest\",\"node\":\"24.22.3\"},{\"os\":\"macos-latest\",\"node\":\"22.23.5\"},{\"os\":\"windows-latest\",\"node\":\"22.23.5\"}]}" >> $GITHUB_OUTPUT
           echo "cache-key=${{ env.CACHE_VERSION }}-${{ runner.os }}-${{ hashFiles('**/package-lock.json') }}" >> $GITHUB_OUTPUT
 
       - name: Install dependencies
@@ -226,14 +229,14 @@ jobs:
         continue-on-error: true
 
       - name: Run performance tests
-        if: matrix.os == 'ubuntu-latest' && matrix.node == '20'
+        if: matrix.os == 'ubuntu-latest' && matrix.node == '22.23.5'
         run: |
           echo "⚡ Running performance tests..."
           npm run test:performance || echo "⚠️ Some performance tests failed (non-blocking)"
         continue-on-error: true
 
       - name: Generate coverage report
-        if: matrix.os == 'ubuntu-latest' && matrix.node == '20'
+        if: matrix.os == 'ubuntu-latest' && matrix.node == '22.23.5'
         run: |
           echo "📊 Generating coverage report..."
           npm run test:coverage || echo "⚠️ Coverage generation failed (non-blocking)"
