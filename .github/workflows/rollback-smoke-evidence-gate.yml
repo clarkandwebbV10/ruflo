@@ -6,6 +6,7 @@ on:
       - '.github/workflows/rollback-manager.yml'
       - '.github/workflows/rollback-smoke-evidence-gate.yml'
       - 'tests/rollback-smoke-verification.test.cjs'
+      - 'tests/rollback-dispatch-input-safety.test.cjs'
       - 'package.json'
   workflow_dispatch:
 
@@ -19,4 +20,4 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Verify rollback smoke and build failure propagation without dependency install
-        run: node --test tests/rollback-smoke-verification.test.cjs
+        run: node --test tests/rollback-smoke-verification.test.cjs tests/rollback-dispatch-input-safety.test.cjs
