@@ -6,19 +6,19 @@ const path = require('node:path');
 
 const source = fs.readFileSync(path.join(__dirname, '..', '.github', 'workflows', 'all-plugins-smoke.yml'), 'utf8');
 function checkRuntime(text) {
-  assert.match(text, /node-version:\\s*['"]22\\.23\\.5['"]/);
-  assert.doesNotMatch(text, /node-version:\\s*['"]?20(?:['"]|\\s|$)/m);
+  assert.match(text, /node-version:\s*['"]22\.23\.5['"]/);
+  assert.doesNotMatch(text, /node-version:\s*['"]?20(?:['"]|\s|$)/m);
 }
 function checkPermissions(text) {
-  assert.match(text, /\\npermissions:\\n  contents: read\\n\\njobs:/);
-  assert.doesNotMatch(text, /^  (?:actions|contents|deployments|packages|pull-requests|issues|id-token|security-events): write\\s*$/m);
+  assert.match(text, /\npermissions:\n  contents: read\n\njobs:/);
+  assert.doesNotMatch(text, /^  (?:actions|contents|deployments|packages|pull-requests|issues|id-token|security-events): write\s*$/m);
 }
 function checkTriggers(text) {
   const push = text.split('  push:')[1]?.split('  pull_request:')[0] || '';
   const pr = text.split('  pull_request:')[1]?.split('  workflow_dispatch:')[0] || '';
   for (const block of [push, pr]) {
-    assert.match(block, /tests\\/all-plugins-ci-security\\.test\\.cjs/);
-    assert.match(block, /\\.github\\/workflows\\/all-plugins-smoke\\.yml/);
+    assert.match(block, /tests\/all-plugins-ci-security\.test\.cjs/);
+    assert.match(block, /\.github\/workflows\/all-plugins-smoke\.yml/);
   }
 }
 function checkGates(text) {
@@ -42,4 +42,4 @@ test('downgrade mutation is rejected', () =>
 test('token escalation mutation is rejected', () =>
   assert.throws(() => checkPermissions(source.replace('contents: read', 'contents: write'))));
 test('missing test trigger mutation is rejected', () =>
-  assert.throws(() => checkTriggers(source.replaceAll("      - 'tests/all-plugins-ci-security.test.cjs'\\n", ''))));
+  assert.throws(() => checkTriggers(source.replaceAll("      - 'tests/all-plugins-ci-security.test.cjs'\n", ''))));
