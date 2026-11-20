@@ -37,7 +37,7 @@ permissions:
   # SEC-024: read-only until protected approval and provenance are independently verified.
 
 env:
-  NODE_VERSION: '20'
+  NODE_VERSION: '22.23.5'
   ROLLBACK_RETENTION_DAYS: 90
   CRITICAL_FAILURE_THRESHOLD: 3
   MONITORING_WINDOW_MINUTES: 15
