@@ -262,7 +262,8 @@ jobs:
           npm ci --legacy-peer-deps
 
           echo "Testing build..."
-          npm run build:ts
+          # Invoke the CLI build directly; root build:ts masks failures with || true.
+          npm --prefix v3/@claude-flow/cli run build
 
           # Switch back to original branch
           git checkout "${{ github.ref_name }}"
@@ -328,8 +329,9 @@ jobs:
             # Create rollback commit
             echo "Creating rollback commit..."
             
-            # Reset to target commit but keep it as a new commit
-            git reset --hard "$ROLLBACK_TARGET"
+            # Restore target contents without rewriting ancestry.
+            # A rollback is a new descendant commit, not a reset of branch history.
+            git restore --source="$ROLLBACK_TARGET" --staged --worktree -- .
             
             # Create a revert commit with metadata
             cat > ROLLBACK_INFO.md << EOF
@@ -352,7 +354,9 @@ jobs:
           This rollback was executed automatically by the Rollback Manager workflow.
           EOF
             
-            git add ROLLBACK_INFO.md
+            # Target-tree changes are staged by git restore; add only the receipt.
+            # Never stage downloaded backup artifacts or other untracked runner files.
+            git add -- ROLLBACK_INFO.md
             git commit -m "🔄 Automated rollback to $ROLLBACK_TARGET
 
           Reason: $ROLLBACK_REASON
@@ -379,12 +383,9 @@ jobs:
         run: |
           echo "📤 Pushing rollback commit..."
           
-          # Force push the rollback (use with caution)
-          if [ "${{ github.event.inputs.emergency_mode }}" = "true" ]; then
-            git push origin HEAD:${{ github.ref_name }} --force-with-lease
-          else
-            git push origin HEAD:${{ github.ref_name }}
-          fi
+          # Refuse non-fast-forward updates even during emergency recovery.
+          # Concurrent upstream changes require a fresh, reviewed rollback.
+          git push origin HEAD:${{ github.ref_name }}
           
           echo "✅ Rollback pushed successfully"
 
@@ -428,21 +429,21 @@ jobs:
 
       - name: Verify build functionality
         run: |
+          set -euo pipefail
           echo "🔍 Verifying build functionality..."
           
           # Test basic build
-          npm run build:ts || (echo "❌ Build failed after rollback" && exit 1)
+          # Root build:ts contains '|| true' and cannot be used as an acceptance gate.
+          npm --prefix v3/@claude-flow/cli run build
           
           echo "✅ Build verification passed"
 
       - name: Run smoke tests
         run: |
-          echo "🧪 Running smoke tests..."
-          
-          # Run basic tests to ensure functionality
-          timeout 120s npm run test:unit || echo "⚠️ Some tests failed"
-          
-          echo "✅ Smoke tests completed"
+          set -euo pipefail
+          echo "🧪 Running rollback smoke tests (vitest)..."
+          timeout 120s npm run test -- --run
+          echo "✅ Rollback smoke tests passed"
 
       - name: Verify CLI functionality
         run: |
@@ -518,18 +519,14 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Monitor system stability
+      - name: Document monitoring evidence limitations
         run: |
-          echo "📊 Monitoring system stability after rollback..."
+          echo "⚠️ No live runtime probes or deployed health metrics are configured."
+          echo "⚠️ Post-rollback test success is not proof of production stability."
+          echo "⚠️ Do not claim a monitoring duration, incident count, or stable runtime."
+          #
           
-          # Monitor for specified window
-          MONITOR_DURATION="${{ env.MONITORING_WINDOW_MINUTES }}"
-          echo "Monitoring for $MONITOR_DURATION minutes..."
-          
-          # Simulate monitoring (in real scenario, this would check actual metrics)
-          sleep 30  # Short monitoring for demo
-          
-          echo "✅ Monitoring completed - system appears stable"
+          # No timing delay is a substitute for live runtime health probes.
 
       - name: Generate rollback report
         run: |
@@ -548,17 +545,18 @@ jobs:
               "reason": "${{ github.event.inputs.rollback_reason || 'Automated rollback' }}"
             },
             "verification": {
-              "buildPassed": true,
-              "testsPassed": true,
-              "cliWorking": true,
-              "systemHealthy": true
+              "postRollbackJobResult": "${{ needs.post-rollback-verification.result }}",
+              "scope": "build, smoke tests, CLI checks and static configuration checks only",
+              "liveRuntimeVerified": false
             },
             "monitoring": {
-              "duration": "${{ env.MONITORING_WINDOW_MINUTES }} minutes",
-              "systemStable": true,
-              "issuesDetected": 0
+              "configured": false,
+              "runtimeMetricsCollected": false,
+              "systemStable": null,
+              "issuesDetected": null,
+              "status": "not_verified"
             },
-            "status": "completed_successfully"
+            "status": "post_rollback_checks_passed_runtime_stability_unverified"
           }
           EOF
           
@@ -567,8 +565,8 @@ jobs:
           # 🔄 Rollback Execution Report
           
           **Session ID:** ${{ needs.failure-detection.outputs.rollback-session-id || 'manual' }}
-          **Execution Time:** $(date -u +%Y-%m-%dT%H:%M:%SZ)
-          **Status:** ✅ COMPLETED SUCCESSFULLY
+          **Execution Time:** See timestamp in rollback-report.json
+          **Status:** Post-rollback checks passed; live runtime stability **UNVERIFIED**
           
           ## Rollback Details
           
@@ -584,19 +582,19 @@ jobs:
           | Build | ✅ Passed |
           | Tests | ✅ Passed |
           | CLI | ✅ Working |
-          | Health | ✅ Healthy |
+          | Static health check | ✅ Package metadata/configuration checks only; no live runtime probe |
           
           ## Post-Rollback Monitoring
           
-          - **Duration:** ${{ env.MONITORING_WINDOW_MINUTES }} minutes
-          - **System Stability:** ✅ Stable
-          - **Issues Detected:** 0
+          - **Duration:** Not monitored
+          - **System Stability:** ⚠️ Unverified (no runtime metrics configured)
+          - **Issues Detected:** Unknown (no incident telemetry sampled)
           
           ## Next Steps
           
-          1. ✅ System has been successfully rolled back
-          2. ✅ All verification checks passed
-          3. ✅ Monitoring completed successfully
+          1. ✅ Rollback execution job produced a rollback commit (confirm remote state separately)
+          2. ✅ Post-rollback verification job completed successfully
+          3. ⚠️ Collect real runtime health metrics; stability is not established
           4. 🔍 Investigate original failure cause
           5. 🛠️ Implement fixes before next deployment
           
@@ -619,7 +617,7 @@ jobs:
             const report = `
             ## 🔄 Automated Rollback Executed
             
-            **Status:** ✅ COMPLETED SUCCESSFULLY
+            **Status:** Post-rollback checks passed; production stability unverified
             **Commit:** ${{ needs.execute-rollback.outputs.rollback-commit }}
             **Target:** ${{ github.event.inputs.rollback_target || needs.failure-detection.outputs.rollback-target }}
             **Reason:** ${{ github.event.inputs.rollback_reason || 'Automated rollback due to CI failure' }}
@@ -628,9 +626,9 @@ jobs:
             - ✅ Build successful
             - ✅ Tests passing
             - ✅ CLI functional
-            - ✅ System healthy
+            - ⚠️ Static configuration checks passed; live runtime health unverified
             
-            The system has been automatically rolled back and is now stable.
+            A rollback commit was produced. The workflow does not measure deployed runtime stability.
             Please investigate the original failure before the next deployment.
             `;
             
