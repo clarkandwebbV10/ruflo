@@ -23,6 +23,10 @@ function executeDetection(eventName, conclusion, upstreamName) {
     script = script.replaceAll('${{ ' + name + ' }}', value);
   }
   assert.ok(!script.includes('${{'), 'all GitHub expressions replaced');
+  // Stub the runner's GITHUB_OUTPUT file redirections into captured stdout.
+  // This preserves assignment/decision logic without relying on Git Bash paths.
+  assert.match(script, />> \$GITHUB_OUTPUT/, 'actual script writes job outputs');
+  script = script.replaceAll('>> $GITHUB_OUTPUT', '');
   const run = spawnSync('bash', ['-e', '-o', 'pipefail'], {
     encoding: 'utf8', input: script,
     env: { ...process.env, GITHUB_OUTPUT: '/dev/stdout' }, timeout: 10000
