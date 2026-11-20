@@ -133,7 +133,9 @@ function rollbackReportTemplate() {
 test('SEC-019: rollback report parses and explicitly declines unsupported health claims', () => {
   const raw = rollbackReportTemplate()
     .replace(/\$\{\{[^}]+\}\}/g, 'placeholder')
-    .replace(/\$\(date[^)]*\)/g, '2026-11-19T00:00:00Z');
+    .replace(/\$\(date[^)]*\)/g, '2026-11-19T00:00:00Z')
+    .replaceAll('$(printf \'%s\' "$MC2_ROLLBACK_TARGET" | jq -Rs .)', '"placeholder"')
+    .replaceAll('$(printf \'%s\' "$MC2_ROLLBACK_REASON" | jq -Rs .)', '"placeholder"');
   const report = JSON.parse(raw);
   assert.equal(report.verification.liveRuntimeVerified, false);
   assert.equal(report.monitoring.configured, false);
