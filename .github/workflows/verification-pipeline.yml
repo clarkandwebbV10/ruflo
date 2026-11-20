@@ -18,7 +18,7 @@ on:
           - security-only
 
 env:
-  NODE_VERSION: '20'
+  NODE_VERSION: '22.23.5'
   CACHE_VERSION: v1
 
 jobs:
