@@ -47,7 +47,7 @@ on:
 # deps from the registry instead of linking them, and the cli build then
 # can't find @claude-flow/cli-core's dist.
 env:
-  NODE_VERSION: '20'
+  NODE_VERSION: '22.23.5'
   PNPM_VERSION: '8'
 
 jobs:
@@ -64,6 +64,8 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'pnpm'
           cache-dependency-path: v3/pnpm-lock.yaml
+      - name: Verify supported funnel CI Node (dependency-free)
+        run: node --test tests/funnel-ci-supported-node.test.cjs
       - name: Install dependencies
         working-directory: v3
         run: pnpm install --frozen-lockfile
