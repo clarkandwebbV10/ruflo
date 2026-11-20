@@ -27,8 +27,13 @@ function executeDetection(eventName, conclusion, upstreamName) {
       script = script.replaceAll('${{ ' + name + ' }}', value);
     }
     assert.ok(!script.includes('${{'), 'all GitHub expressions replaced in test script');
-    const run = spawnSync('bash', ['-e', '-o', 'pipefail', '-c', script], {
-      encoding: 'utf8', env: { ...process.env, GITHUB_OUTPUT: output }, timeout: 10000
+    // Feed Bash on stdin: Windows Git Bash can misparse a multiline -c argument.
+    const bashOutput = process.platform === 'win32'
+      ? output.replace(/^([A-Za-z]):/, (_, letter) => '/' + letter.toLowerCase()).replaceAll('\\\\', '/')
+      : output;
+    const run = spawnSync('bash', ['-e', '-o', 'pipefail'], {
+      encoding: 'utf8', input: script,
+      env: { ...process.env, GITHUB_OUTPUT: bashOutput }, timeout: 10000
     });
     assert.equal(run.status, 0, run.stderr || run.stdout);
     const values = Object.fromEntries(fs.readFileSync(output, 'utf8').trim().split('\n').map(s => {
