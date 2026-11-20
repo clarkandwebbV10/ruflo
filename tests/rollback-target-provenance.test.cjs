@@ -29,7 +29,7 @@ function executeDetection(eventName, conclusion, upstreamName) {
     assert.ok(!script.includes('${{'), 'all GitHub expressions replaced in test script');
     // Feed Bash on stdin: Windows Git Bash can misparse a multiline -c argument.
     const bashOutput = process.platform === 'win32'
-      ? output.replace(/^([A-Za-z]):/, (_, letter) => '/' + letter.toLowerCase()).replaceAll('\\\\', '/')
+      ? output.replace(/^([A-Za-z]):/, (_, letter) => '/' + letter.toLowerCase()).split(String.fromCharCode(92)).join('/')
       : output;
     const run = spawnSync('bash', ['-e', '-o', 'pipefail'], {
       encoding: 'utf8', input: script,
