@@ -329,8 +329,9 @@ jobs:
             # Create rollback commit
             echo "Creating rollback commit..."
             
-            # Reset to target commit but keep it as a new commit
-            git reset --hard "$ROLLBACK_TARGET"
+            # Restore target contents without rewriting ancestry.
+            # A rollback is a new descendant commit, not a reset of branch history.
+            git restore --source="$ROLLBACK_TARGET" --staged --worktree -- .
             
             # Create a revert commit with metadata
             cat > ROLLBACK_INFO.md << EOF
@@ -353,7 +354,8 @@ jobs:
           This rollback was executed automatically by the Rollback Manager workflow.
           EOF
             
-            git add ROLLBACK_INFO.md
+            # Target-tree changes are already staged; include the rollback receipt.
+            git add -A
             git commit -m "🔄 Automated rollback to $ROLLBACK_TARGET
 
           Reason: $ROLLBACK_REASON
@@ -380,12 +382,9 @@ jobs:
         run: |
           echo "📤 Pushing rollback commit..."
           
-          # Force push the rollback (use with caution)
-          if [ "${{ github.event.inputs.emergency_mode }}" = "true" ]; then
-            git push origin HEAD:${{ github.ref_name }} --force-with-lease
-          else
-            git push origin HEAD:${{ github.ref_name }}
-          fi
+          # Refuse non-fast-forward updates even during emergency recovery.
+          # Concurrent upstream changes require a fresh, reviewed rollback.
+          git push origin HEAD:${{ github.ref_name }}
           
           echo "✅ Rollback pushed successfully"
 
