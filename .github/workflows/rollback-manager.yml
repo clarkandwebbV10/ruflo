@@ -32,6 +32,10 @@ on:
           - infrastructure
           - full
 
+permissions:
+  contents: read
+  # SEC-024: read-only until protected approval and provenance are independently verified.
+
 env:
   NODE_VERSION: '20'
   ROLLBACK_RETENTION_DAYS: 90
@@ -39,6 +43,17 @@ env:
   MONITORING_WINDOW_MINUTES: 15
 
 jobs:
+  # SEC-024: visibly reject unsupported manual dispatch; never silently skip.
+  manual-dispatch-hold:
+    name: Manual rollback unavailable — approval not verified
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Reject manual rollback until required approvals are verified
+        run: |
+          echo '::error::Manual rollback is on HOLD: required approvers, event origin and rollback target not verified.'
+          exit 1
+
   # Detect failure conditions
   failure-detection:
     name: 🚨 Failure Detection
@@ -287,13 +302,16 @@ jobs:
   execute-rollback:
     name: 🔄 Execute Rollback
     runs-on: ubuntu-latest
-    needs: [failure-detection, pre-rollback-validation]
+    # An approval job must gate execution; its existence alone does not prove reviewers are configured.
+    needs: [failure-detection, pre-rollback-validation, manual-rollback-approval]
     env:
       MC2_ROLLBACK_TARGET: ${{ github.event.inputs.rollback_target || needs.failure-detection.outputs.rollback-target }}
       MC2_ROLLBACK_REASON: ${{ github.event.inputs.rollback_reason || 'Automated rollback due to CI failure' }}
       MC2_ROLLBACK_SCOPE: ${{ github.event.inputs.rollback_scope || 'application' }}
       MC2_EMERGENCY_MODE: ${{ github.event.inputs.emergency_mode || 'false' }}
-    if: needs.pre-rollback-validation.outputs.validation-passed == 'true' && (needs.failure-detection.outputs.failure-severity == 'high' || github.event.inputs.emergency_mode == 'true' || github.event_name == 'workflow_dispatch')
+    # SEC-024 RELEASE HOLD: do not enable writes until reviewer rules, SHA provenance,
+    # branch restrictions, independent CI and real recovery are validated.
+    if: ${{ false }}
     environment: 
       name: rollback-approval
     outputs:
