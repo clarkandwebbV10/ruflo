@@ -106,13 +106,14 @@ jobs:
             fi
           fi
           
-          # Check for recent commit history to find safe rollback target
+          # A commit-message marker (or HEAD~1) is not evidence of a passing release.
+          # Until a trusted CI-success SHA and approval are verified, fail closed:
+          # report the failure but do not select or execute an automatic rollback.
           if [ "$ROLLBACK_REQUIRED" = "true" ]; then
-            # Find the last successful commit (simplified logic)
-            ROLLBACK_TARGET=$(git log --oneline -10 --grep="✅" --grep="🏁" | head -1 | cut -d' ' -f1)
-            if [ -z "$ROLLBACK_TARGET" ]; then
-              ROLLBACK_TARGET="HEAD~1"
-            fi
+            echo "::warning::Automatic rollback held: no CI-success-verified target."
+            ROLLBACK_REQUIRED="false"
+            FAILURE_TYPE="ci_failure_unverified_target"
+            ROLLBACK_TARGET=""
           fi
           
           echo "rollback-required=$ROLLBACK_REQUIRED" >> $GITHUB_OUTPUT
@@ -127,7 +128,7 @@ jobs:
           echo "  Target: $ROLLBACK_TARGET"
 
       - name: Create failure report
-        if: steps.detect.outputs.rollback-required == 'true'
+        if: steps.detect.outputs.failure-type != 'none'
         run: |
           echo "📋 Creating failure report..."
           
@@ -147,17 +148,17 @@ jobs:
             "failure": {
               "type": "${{ steps.detect.outputs.failure-type }}",
               "severity": "${{ steps.detect.outputs.failure-severity }}",
-              "rollbackRequired": true
+              "rollbackRequired": ${{ steps.detect.outputs.rollback-required }}
             },
             "rollback": {
               "target": "${{ steps.detect.outputs.rollback-target }}",
-              "reason": "Automated rollback due to ${{ steps.detect.outputs.failure-type }}"
+              "reason": "CI failed; no independently verified rollback target; automatic action held"
             }
           }
           EOF
 
       - name: Upload failure detection results
-        if: steps.detect.outputs.rollback-required == 'true'
+        if: steps.detect.outputs.failure-type != 'none'
         uses: actions/upload-artifact@v4
         with:
           name: failure-detection-${{ steps.detect.outputs.rollback-session-id }}
