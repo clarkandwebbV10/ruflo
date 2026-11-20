@@ -354,8 +354,9 @@ jobs:
           This rollback was executed automatically by the Rollback Manager workflow.
           EOF
             
-            # Target-tree changes are already staged; include the rollback receipt.
-            git add -A
+            # Target-tree changes are staged by git restore; add only the receipt.
+            # Never stage downloaded backup artifacts or other untracked runner files.
+            git add -- ROLLBACK_INFO.md
             git commit -m "🔄 Automated rollback to $ROLLBACK_TARGET
 
           Reason: $ROLLBACK_REASON
