@@ -15,6 +15,7 @@ on:
       - 'v3/@claude-flow/cli/src/mcp-tools/index.ts'
       - 'v3/@claude-flow/cli/src/mcp-client.ts'
       - '.github/workflows/business-pods-smoke.yml'
+      - 'tests/business-pods-ci-security.test.cjs'
   pull_request:
     paths:
       - 'plugins/ruflo-business-pods/**'
@@ -23,7 +24,11 @@ on:
       - 'v3/@claude-flow/cli/src/mcp-tools/index.ts'
       - 'v3/@claude-flow/cli/src/mcp-client.ts'
       - '.github/workflows/business-pods-smoke.yml'
+      - 'tests/business-pods-ci-security.test.cjs'
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   smoke:
@@ -36,9 +41,11 @@ jobs:
           version: 8
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22.23.5'
           cache: 'pnpm'
           cache-dependency-path: v3/pnpm-lock.yaml
+      - name: Verify business-pods CI security invariants
+        run: node --test tests/business-pods-ci-security.test.cjs
       - name: install + build CLI (pnpm, v3 workspace)
         # The root package.json uses npm/workspaces but the v3/ tree is a
         # pnpm workspace (v3/pnpm-workspace.yaml). npm chokes on
