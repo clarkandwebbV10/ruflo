@@ -201,7 +201,7 @@ test('SEC-020: rollback produces a new descendant commit without erasing history
     const result = spawnSync('bash', ['-e', '-c', script], {
       cwd: tmpDir,
       encoding: 'utf8',
-      env: { ...process.env, GITHUB_OUTPUT: outputFile },
+      env: { ...process.env, GITHUB_OUTPUT: outputFile, MC2_ROLLBACK_TARGET: target, MC2_ROLLBACK_REASON: 'CI failure test', MC2_ROLLBACK_SCOPE: 'application', MC2_EMERGENCY_MODE: 'false' },
     });
     assert.equal(result.status, 0, result.stderr + '\n' + result.stdout);
     const rollbackHead = git('rev-parse', 'HEAD');
