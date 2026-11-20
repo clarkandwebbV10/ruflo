@@ -1,6 +1,11 @@
 name: Rollback smoke-evidence gate
 
 on:
+  # Branch-scoped, read-only proof run for stacked security PRs whose
+  # pull_request checks have not appeared on their exact head SHA.
+  push:
+    branches:
+      - security/rollback-target-provenance-hold-20261120
   pull_request:
     paths:
       - '.github/workflows/rollback-manager.yml'
