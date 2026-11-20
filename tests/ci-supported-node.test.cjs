@@ -33,3 +33,11 @@ for (const [name, count] of Object.entries(workflows)) {
     assert.throws(() => checkConfig(bad, count));
   });
 }
+
+test('main CI runs regression gate before dependency installation', () => {
+  const ci = fs.readFileSync(path.join(__dirname, '..', '.github', 'workflows', 'ci.yml'), 'utf8');
+  const regression = ci.indexOf('run: node --test tests/ci-supported-node.test.cjs');
+  const install = ci.indexOf('uses: ./.github/actions/npm-ci-retry');
+  assert.ok(regression >= 0, 'regression must be wired into the CI workflow');
+  assert.ok(install > regression, 'run this regression before installing vulnerable dependencies');
+});
