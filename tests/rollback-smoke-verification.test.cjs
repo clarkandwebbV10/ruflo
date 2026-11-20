@@ -41,12 +41,12 @@ for (const [exitCode, expected] of [[0, 0], [1, 1], [124, 124]]) {
   test('rollback smoke shell propagates timeout exit ' + exitCode, () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc2-rollback-test-'));
     try {
-      const stub = path.join(tmpDir, 'timeout');
       const argsFile = path.join(tmpDir, 'args.txt');
-      fs.writeFileSync(stub, '#!/bin/sh\nprintf "%s" "$*" > "$MOCK_ARGS_FILE"\nexit "$MOCK_TIMEOUT_STATUS"\n', { mode: 0o755 });
-      const result = spawnSync('bash', ['-e', '-c', smokeStepScript()], {
-        cwd: repoRoot,
-        env: { ...process.env, PATH: tmpDir + path.delimiter + process.env.PATH, MOCK_ARGS_FILE: argsFile, MOCK_TIMEOUT_STATUS: String(exitCode) },
+      // The shell function avoids Windows/MSYS/WSL mock PATH translation issues.
+      const mockTimeout = 'timeout() { printf "%s" "$*" > "$MOCK_ARGS_FILE"; return "$MOCK_TIMEOUT_STATUS"; }\n';
+      const result = spawnSync('bash', ['-e', '-c', mockTimeout + smokeStepScript()], {
+        cwd: tmpDir,
+        env: { ...process.env, MOCK_ARGS_FILE: 'args.txt', MOCK_TIMEOUT_STATUS: String(exitCode) },
         encoding: 'utf8',
       });
       assert.equal(result.status, expected, result.stderr);
@@ -170,6 +170,8 @@ test('SEC-020: rollback produces a new descendant commit without erasing history
     git('init', '-q', '-b', 'main');
     git('config', 'user.name', 'MC2 CI Test');
     git('config', 'user.email', 'ci-test@example.invalid');
+    // Normalize fixture checkout on Git for Windows.
+    git('config', 'core.autocrlf', 'false');
     fs.writeFileSync(path.join(tmpDir, 'stable.txt'), 'safe baseline\n');
     git('add', '-A');
     git('commit', '-qm', 'baseline');
