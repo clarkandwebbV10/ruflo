@@ -3,7 +3,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
-const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
@@ -12,38 +11,27 @@ const detect = workflow.match(/^      - name: Detect failure conditions\n       
 assert.ok(detect, 'detection job run block exists');
 
 function executeDetection(eventName, conclusion, upstreamName) {
-  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'mc2-rollback-provenance-'));
-  const output = path.join(directory, 'step-output.txt');
-  fs.writeFileSync(output, '');
-  try {
-    let script = detect[1].split('\n').map(line => line.startsWith('          ') ? line.slice(10) : line).join('\n');
-    const bindings = {
-      'github.sha': '0123456789abcdef0123456789abcdef01234567',
-      'github.event_name': eventName,
-      'github.event.workflow_run.conclusion': conclusion,
-      'github.event.workflow_run.name': upstreamName,
-    };
-    for (const [name, value] of Object.entries(bindings)) {
-      script = script.replaceAll('${{ ' + name + ' }}', value);
-    }
-    assert.ok(!script.includes('${{'), 'all GitHub expressions replaced in test script');
-    // Feed Bash on stdin: Windows Git Bash can misparse a multiline -c argument.
-    const bashOutput = process.platform === 'win32'
-      ? output.replace(/^([A-Za-z]):/, (_, letter) => '/' + letter.toLowerCase()).split(String.fromCharCode(92)).join('/')
-      : output;
-    const run = spawnSync('bash', ['-e', '-o', 'pipefail'], {
-      encoding: 'utf8', input: script,
-      env: { ...process.env, GITHUB_OUTPUT: bashOutput }, timeout: 10000
-    });
-    assert.equal(run.status, 0, run.stderr || run.stdout);
-    const values = Object.fromEntries(fs.readFileSync(output, 'utf8').trim().split('\n').map(s => {
-      const i = s.indexOf('=');
-      return [s.slice(0, i), s.slice(i + 1)];
-    }));
-    return { values, logs: run.stdout };
-  } finally {
-    fs.rmSync(directory, { recursive: true, force: true });
+  // Use stdout for step outputs, avoiding host-path rewriting inside Windows Git Bash.
+  let script = detect[1].split('\n').map(line => line.startsWith('          ') ? line.slice(10) : line).join('\n');
+  const bindings = {
+    'github.sha': '0123456789abcdef0123456789abcdef01234567',
+    'github.event_name': eventName,
+    'github.event.workflow_run.conclusion': conclusion,
+    'github.event.workflow_run.name': upstreamName,
+  };
+  for (const [name, value] of Object.entries(bindings)) {
+    script = script.replaceAll('${{ ' + name + ' }}', value);
   }
+  assert.ok(!script.includes('${{'), 'all GitHub expressions replaced');
+  const run = spawnSync('bash', ['-e', '-o', 'pipefail'], {
+    encoding: 'utf8', input: script,
+    env: { ...process.env, GITHUB_OUTPUT: '/dev/stdout' }, timeout: 10000
+  });
+  assert.equal(run.status, 0, run.stderr || run.stdout);
+  const values = Object.fromEntries(run.stdout.split('\n')
+    .filter(s => /^(rollback-required|failure-type|failure-severity|rollback-target|rollback-session-id)=/.test(s))
+    .map(s => { const i = s.indexOf('='); return [s.slice(0, i), s.slice(i + 1)]; }));
+  return { values, logs: run.stdout };
 }
 
 test('SEC-023: no unverified message/HEAD~1 rollback selector is allowed', () => {
