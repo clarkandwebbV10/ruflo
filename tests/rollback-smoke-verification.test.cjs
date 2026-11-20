@@ -133,7 +133,9 @@ function rollbackReportTemplate() {
 test('SEC-019: rollback report parses and explicitly declines unsupported health claims', () => {
   const raw = rollbackReportTemplate()
     .replace(/\$\{\{[^}]+\}\}/g, 'placeholder')
-    .replace(/\$\(date[^)]*\)/g, '2026-11-19T00:00:00Z');
+    .replace(/\$\(date[^)]*\)/g, '2026-11-19T00:00:00Z')
+    .replaceAll('$(printf \'%s\' "$MC2_ROLLBACK_TARGET" | jq -Rs .)', '"placeholder"')
+    .replaceAll('$(printf \'%s\' "$MC2_ROLLBACK_REASON" | jq -Rs .)', '"placeholder"');
   const report = JSON.parse(raw);
   assert.equal(report.verification.liveRuntimeVerified, false);
   assert.equal(report.monitoring.configured, false);
@@ -201,7 +203,7 @@ test('SEC-020: rollback produces a new descendant commit without erasing history
     const result = spawnSync('bash', ['-e', '-c', script], {
       cwd: tmpDir,
       encoding: 'utf8',
-      env: { ...process.env, GITHUB_OUTPUT: outputFile },
+      env: { ...process.env, GITHUB_OUTPUT: outputFile, MC2_ROLLBACK_TARGET: target, MC2_ROLLBACK_REASON: 'CI failure test', MC2_ROLLBACK_SCOPE: 'application', MC2_EMERGENCY_MODE: 'false' },
     });
     assert.equal(result.status, 0, result.stderr + '\n' + result.stdout);
     const rollbackHead = git('rev-parse', 'HEAD');
