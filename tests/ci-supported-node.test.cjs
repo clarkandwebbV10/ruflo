@@ -41,3 +41,60 @@ test('main CI runs regression gate before dependency installation', () => {
   assert.ok(regression >= 0, 'regression must be wired into the CI workflow');
   assert.ok(install > regression, 'run this regression before installing vulnerable dependencies');
 });
+
+
+// SEC-032: status aggregation must not report green when required CI jobs fail.
+const { spawnSync } = require('node:child_process');
+const ciStatus = fs.readFileSync(path.join(__dirname, '..', '.github', 'workflows', 'ci.yml'), 'utf8');
+const marker = '      - name: Check overall status\n';
+assert.equal(ciStatus.split(marker).length, 2, 'expected exactly one CI status summary step');
+const statusSection = ciStatus.split(marker)[1];
+const runMarker = '        run: |\n';
+assert.ok(statusSection.includes(runMarker), 'summary must have executable run block');
+const statusScript = statusSection.split(runMarker)[1].split('\n')
+  .filter(line => line.startsWith('          '))
+  .map(line => line.slice(10)).join('\n');
+
+test('SEC-032 status job runs even after upstream failures and passes all 3 results safely', () => {
+  assert.match(ciStatus, /needs:\s*\[security,\s*test,\s*build\]/);
+  assert.match(ciStatus, /if:\s*always\(\)/);
+  for (const name of ['SECURITY', 'TEST', 'BUILD']) {
+    assert.match(statusSection, new RegExp(name + '_RESULT: \\$\\{\\{ needs\\.' + name.toLowerCase() + '\\.result \\}\\}'));
+  }
+  assert.match(statusSection, /shell:\s*bash/);
+  assert.match(statusScript, /exit 1/);
+});
+
+function runSummary(security, suite, build, script = statusScript) {
+  return spawnSync('bash', ['-e', '-c', script], {
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      SECURITY_RESULT: security,
+      TEST_RESULT: suite,
+      BUILD_RESULT: build,
+    },
+  });
+}
+
+for (const [label, security, suite, build, expected] of [
+  ['all passed', 'success', 'success', 'success', 0],
+  ['security failure', 'failure', 'success', 'skipped', 1],
+  ['test failure', 'success', 'failure', 'skipped', 1],
+  ['build failure', 'success', 'success', 'failure', 1],
+  ['cancelled build', 'success', 'success', 'cancelled', 1],
+  ['skipped security', 'skipped', 'success', 'success', 1],
+]) {
+  test('SEC-032 summary: ' + label + ' -> ' + (expected ? 'red' : 'green'), () => {
+    const result = runSummary(security, suite, build);
+    assert.equal(result.error, undefined, result.error && result.error.message);
+    assert.equal(result.status, expected, result.stdout + '\n' + result.stderr);
+  });
+}
+
+test('SEC-032 mutation proves removing fail-closed exit creates a false green', () => {
+  const weakened = statusScript.replace('exit 1', ':');
+  assert.notEqual(weakened, statusScript);
+  assert.equal(runSummary('failure', 'success', 'skipped', statusScript).status, 1);
+  assert.equal(runSummary('failure', 'success', 'skipped', weakened).status, 0);
+});
