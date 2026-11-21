@@ -15,13 +15,17 @@ function step(name, source = workflow) {
   return source.slice(start, next === -1 ? source.length : next);
 }
 
+function requireFailClosed(s) {
+  assert.doesNotMatch(s, /continue-on-error\s*:\s*true/);
+  assert.doesNotMatch(s, /\|\|\s*(true|echo|exit\s+0)\b/);
+  assert.doesNotMatch(s, /if\s*:\s*always\(\)/);
+}
+
 function verifySmokeGate(name, expectedPlatform) {
   const s = step(name);
   assert.match(s, /node\s+\.\/v3\/@claude-flow\/cli\/bin\/cli\.js\s+--version/);
   assert.match(s, new RegExp(expectedPlatform));
-  assert.doesNotMatch(s, /continue-on-error\s*:\s*true/);
-  assert.doesNotMatch(s, /\|\|\s*(true|echo|exit\s+0)\b/);
-  assert.doesNotMatch(s, /if\s*:\s*always\(\)/);
+  requireFailClosed(s);
   return s;
 }
 
@@ -36,9 +40,9 @@ test('Windows CLI smoke is required to succeed', () => {
 for (const name of ['Test CLI binary (Unix)', 'Test CLI binary (Windows)']) {
   test(`regression: old nonblocking ${name} is rejected`, () => {
     const s = step(name);
-    assert.doesNotMatch(s, /continue-on-error\s*:\s*true/);
+    requireFailClosed(s);
     const broken = s + '\n        continue-on-error: true';
-    assert.match(broken, /continue-on-error\s*:\s*true/);
+    assert.throws(() => requireFailClosed(broken), /continue-on-error/);
   });
 }
 
