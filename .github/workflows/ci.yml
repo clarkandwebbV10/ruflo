@@ -28,7 +28,7 @@ jobs:
           cache: 'npm'
 
       - name: Verify shared CI Node security patch floor
-        run: node --test tests/ci-supported-node.test.cjs tests/ci-security-audit-failclosed.test.cjs
+        run: node --test tests/ci-supported-node.test.cjs tests/ci-security-audit-failclosed.test.cjs tests/ci-typecheck-failclosed.test.cjs
 
       - name: Install dependencies
         uses: ./.github/actions/npm-ci-retry
@@ -43,8 +43,8 @@ jobs:
         run: npm run lint
 
       - name: Type check
-        run: npm run typecheck || echo "⚠️ Type checking skipped (TypeScript compiler crash)"
-        continue-on-error: true
+        # Root package.json defines build=tsc, not typecheck. Fail on compiler errors.
+        run: npm run build -- --noEmit
 
       - name: Check for outdated dependencies
         run: npm outdated || true
