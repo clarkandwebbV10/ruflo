@@ -23,24 +23,30 @@ function auditStep(text) {
 }
 
 function simulate(script, mode) {
+  // Use an on-disk Bash fixture, never a real npm executable or OS-specific PATH.
   const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'mc2-sec033-'));
   try {
-    const calls = path.join(scratch, 'calls.txt');
-    const stub = path.join(scratch, 'npm');
-    fs.writeFileSync(stub, '#!/bin/bash\nprintf "%s\\n" "$*" >> "$AUDIT_CALLS"\n' +
-      'if [[ "$MOCK_MODE" == full && "$*" == "audit --audit-level=high" ]]; then exit 42; fi\n' +
-      'if [[ "$MOCK_MODE" == prod && "$*" == "audit --omit=dev --audit-level=moderate" ]]; then exit 43; fi\n' +
-      'exit 0\n');
-    fs.chmodSync(stub, 0o755);
-    const execution = spawnSync('bash', ['-c', script], {
-      cwd: scratch, encoding: 'utf8', timeout: 6000,
-      env: { ...process.env, PATH: scratch + path.delimiter + process.env.PATH,
-        AUDIT_CALLS: calls, MOCK_MODE: mode },
+    const mock = [
+      'npm() {',
+      '  printf "MC2_AUDIT_CALL:%s\\n" "$*"',
+      '  if [ "$MOCK_MODE" = "full" ] && [ "$*" = "audit --audit-level=high" ]; then return 42; fi',
+      '  if [ "$MOCK_MODE" = "prod" ] && [ "$*" = "audit --omit=dev --audit-level=moderate" ]; then return 43; fi',
+      '  return 0',
+      '}',
+    ].join('\n') + '\n';
+    assert.ok(['clean', 'full', 'prod'].includes(mode));
+    fs.writeFileSync(path.join(scratch, 'run.sh'), 'MOCK_MODE=' + mode + '\n' + mock + script, 'utf8');
+    // Bash's working directory must be the PARENT to avoid Windows EBUSY at cleanup.
+    const execution = spawnSync('bash', ['./' + path.basename(scratch) + '/run.sh'], {
+      cwd: os.tmpdir(), encoding: 'utf8', timeout: 6000,
     });
     assert.ifError(execution.error);
-    return { status: execution.status, calls: fs.existsSync(calls) ? fs.readFileSync(calls, 'utf8').trim().split('\n') : [] };
+    const calls = execution.stdout.split(/\r?\n/)
+      .filter(line => line.startsWith('MC2_AUDIT_CALL:'))
+      .map(line => line.slice('MC2_AUDIT_CALL:'.length));
+    return { status: execution.status, calls, stderr: execution.stderr };
   } finally {
-    fs.rmSync(scratch, { recursive: true, force: true });
+    fs.rmSync(scratch, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   }
 }
 
@@ -62,19 +68,19 @@ test('production-only audit blocks on moderate findings', () => {
 
 test('clean scans run both audit commands and succeed', () => {
   const r = simulate(script, 'clean');
-  assert.equal(r.status, 0);
+  assert.equal(r.status, 0, r.stderr);
   assert.deepEqual(r.calls, ['audit --audit-level=high', 'audit --omit=dev --audit-level=moderate']);
 });
 
 test('high vulnerability in full tree fails the shell and skips production scan', () => {
   const r = simulate(script, 'full');
-  assert.equal(r.status, 42);
+  assert.equal(r.status, 42, r.stderr);
   assert.deepEqual(r.calls, ['audit --audit-level=high']);
 });
 
 test('moderate production vulnerability fails the shell', () => {
   const r = simulate(script, 'prod');
-  assert.equal(r.status, 43);
+  assert.equal(r.status, 43, r.stderr);
   assert.deepEqual(r.calls, ['audit --audit-level=high', 'audit --omit=dev --audit-level=moderate']);
 });
 
