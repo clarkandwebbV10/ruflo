@@ -28,16 +28,16 @@ jobs:
           cache: 'npm'
 
       - name: Verify shared CI Node security patch floor
-        run: node --test tests/ci-supported-node.test.cjs
+        run: node --test tests/ci-supported-node.test.cjs tests/ci-security-audit-failclosed.test.cjs
 
       - name: Install dependencies
         uses: ./.github/actions/npm-ci-retry
 
       - name: Run security audit
         run: |
-          npm audit --audit-level=high || echo "⚠️ Security vulnerabilities found (non-blocking)"
-          npm audit --production --audit-level=moderate || echo "⚠️ Production vulnerabilities found (non-blocking)"
-        continue-on-error: true
+          set -euo pipefail
+          npm audit --audit-level=high
+          npm audit --omit=dev --audit-level=moderate
         
       - name: Lint code
         run: npm run lint
