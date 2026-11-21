@@ -28,13 +28,19 @@ function execute(command, mode) {
   const shim = 'npm() { printf "mock-call:%s\\n" "$*"; ' +
     'if [ "$*" != "run build -- --noEmit" ]; then return 23; fi; ' +
     disposition + '; }\n' + command;
-  const result = spawnSync('bash', ['-e', '-c', shim], {
-    encoding: 'utf8', timeout: 5000,
-  });
-  assert.ifError(result.error);
-  return { status: result.status,
-    calls: result.stdout.split('\n').filter(line => line.startsWith('mock-call:'))
-      .map(line => line.slice('mock-call:'.length)) };
+  const scratch = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'mc2-sec034-'));
+  try {
+    fs.writeFileSync(path.join(scratch, 'run.sh'), shim, 'utf8');
+    const result = spawnSync('bash', ['-e', './' + path.basename(scratch) + '/run.sh'], {
+      cwd: require('node:os').tmpdir(), encoding: 'utf8', timeout: 5000,
+    });
+    assert.ifError(result.error);
+    return { status: result.status,
+      calls: result.stdout.split(/\r?\n/).filter(line => line.startsWith('mock-call:'))
+        .map(line => line.slice('mock-call:'.length)), stderr: result.stderr };
+  } finally {
+    fs.rmSync(scratch, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+  }
 }
 
 const { step, command } = getTypecheckStep(workflow);
@@ -55,13 +61,13 @@ test('CI type checking is not allowed to continue on error', () => {
 
 test('compiler success preserves a green status', () => {
   const result = execute(command, 'success');
-  assert.equal(result.status, 0);
+  assert.equal(result.status, 0, result.stderr);
   assert.deepEqual(result.calls, ['run build -- --noEmit']);
 });
 
 test('compiler failure is propagated as a red status', () => {
   const result = execute(command, 'fail');
-  assert.equal(result.status, 17);
+  assert.equal(result.status, 17, result.stderr);
   assert.deepEqual(result.calls, ['run build -- --noEmit']);
 });
 
