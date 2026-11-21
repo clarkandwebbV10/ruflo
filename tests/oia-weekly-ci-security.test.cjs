@@ -28,9 +28,9 @@ function simulate({ exit = 0, alert = false, pathLabel = 'file', jsonValid = tru
     const source = path.join(dir, 'source.json');
     const payload = { drift: { structuralDistance: { verdict: 'similar', overall: 0.98 } }, timing: { path: pathLabel, parallelWallMs: 1 }, alert: { triggered: alert } };
     fs.writeFileSync(source, jsonValid ? JSON.stringify(payload) : 'not-json');
-    let script = driftShell().replaceAll('/tmp/drift-trend.json', path.join(dir, 'drift-trend.json'));
+    let script = driftShell().replaceAll('/tmp/drift-trend.json', 'drift-trend.json');
     const result = spawnSync('bash', ['-c', script], {
-      encoding: 'utf8', timeout: 10000, cwd: path.join(__dirname, '..'),
+      encoding: 'utf8', timeout: 10000, cwd: dir,
       env: { ...process.env, PATH: bin + path.delimiter + process.env.PATH,
         MC2_FAKE_JSON: source, MC2_FAKE_EXIT: String(exit), MC2_REAL_NODE: process.execPath,
         GITHUB_STEP_SUMMARY: path.join(dir, 'summary.md') }
