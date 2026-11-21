@@ -4,7 +4,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
-const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
@@ -25,26 +24,17 @@ function getTypecheckStep(yaml) {
 }
 
 function execute(command, mode) {
-  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'mc2-sec034-'));
-  try {
-    const calls = path.join(scratch, 'calls.txt');
-    const bin = path.join(scratch, 'npm');
-    fs.writeFileSync(bin, '#!/bin/sh\nprintf "%s\\n" "$*" >> "$MC2_CALLS"\n' +
-      'if [ "$*" != "run build -- --noEmit" ]; then exit 23; fi\n' +
-      'if [ "$MC2_MODE" = "fail" ]; then exit 17; fi\n' +
-      'exit 0\n');
-    fs.chmodSync(bin, 0o755);
-    const result = spawnSync('bash', ['-e', '-c', command], {
-      cwd: scratch, encoding: 'utf8', timeout: 5000,
-      env: { ...process.env, PATH: scratch + path.delimiter + process.env.PATH,
-        MC2_CALLS: calls, MC2_MODE: mode },
-    });
-    assert.ifError(result.error);
-    return { status: result.status,
-      calls: fs.existsSync(calls) ? fs.readFileSync(calls, 'utf8').trim().split('\n') : [] };
-  } finally {
-    fs.rmSync(scratch, { recursive: true, force: true });
-  }
+  const disposition = mode === 'fail' ? 'return 17' : 'return 0';
+  const shim = 'npm() { printf "mock-call:%s\\n" "$*"; ' +
+    'if [ "$*" != "run build -- --noEmit" ]; then return 23; fi; ' +
+    disposition + '; }\n' + command;
+  const result = spawnSync('bash', ['-e', '-c', shim], {
+    encoding: 'utf8', timeout: 5000,
+  });
+  assert.ifError(result.error);
+  return { status: result.status,
+    calls: result.stdout.split('\n').filter(line => line.startsWith('mock-call:'))
+      .map(line => line.slice('mock-call:'.length)) };
 }
 
 const { step, command } = getTypecheckStep(workflow);
