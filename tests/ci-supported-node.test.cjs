@@ -66,15 +66,25 @@ test('SEC-032 status job runs even after upstream failures and passes all 3 resu
 });
 
 function runSummary(security, suite, build, script = statusScript) {
-  return spawnSync('bash', ['-e', '-c', script], {
-    encoding: 'utf8',
-    env: {
-      ...process.env,
-      SECURITY_RESULT: security,
-      TEST_RESULT: suite,
-      BUILD_RESULT: build,
-    },
-  });
+  // Use a real Bash script with controlled upstream-result fixtures. Git Bash
+  // on Windows can lose env overrides in spawned child processes.
+  const allowed = new Set(['success', 'failure', 'cancelled', 'skipped']);
+  for (const outcome of [security, suite, build]) assert.ok(allowed.has(outcome));
+  const os = require('node:os');
+  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'mc2-sec032-'));
+  try {
+    const assignments = [
+      'SECURITY_RESULT=' + security,
+      'TEST_RESULT=' + suite,
+      'BUILD_RESULT=' + build,
+    ].join('\n') + '\n';
+    fs.writeFileSync(path.join(scratch, 'run.sh'), assignments + script, 'utf8');
+    return spawnSync('bash', ['./' + path.basename(scratch) + '/run.sh'], {
+      cwd: os.tmpdir(), encoding: 'utf8', timeout: 5000,
+    });
+  } finally {
+    fs.rmSync(scratch, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+  }
 }
 
 for (const [label, security, suite, build, expected] of [
