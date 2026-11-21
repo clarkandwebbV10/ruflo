@@ -28,7 +28,7 @@ jobs:
           cache: 'npm'
 
       - name: Verify shared CI Node security patch floor
-        run: node --test tests/ci-supported-node.test.cjs tests/ci-security-audit-failclosed.test.cjs tests/ci-typecheck-failclosed.test.cjs
+        run: node --test tests/ci-supported-node.test.cjs tests/ci-security-audit-failclosed.test.cjs tests/ci-typecheck-failclosed.test.cjs tests/ci-cli-smoke-failclosed.test.cjs
 
       - name: Install dependencies
         uses: ./.github/actions/npm-ci-retry
@@ -165,13 +165,11 @@ jobs:
         run: |
           chmod +x ./v3/@claude-flow/cli/bin/cli.js
           node ./v3/@claude-flow/cli/bin/cli.js --version
-        continue-on-error: true
 
       - name: Test CLI binary (Windows)
         if: runner.os == 'Windows'
         run: |
           node ./v3/@claude-flow/cli/bin/cli.js --version
-        continue-on-error: true
 
       - name: Daemon survives parent exit (Windows, regression #1766)
         if: runner.os == 'Windows'
