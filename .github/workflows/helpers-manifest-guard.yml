@@ -24,6 +24,7 @@ on:
       - 'v3/@claude-flow/cli/scripts/prepare-publish.mjs'
       - 'v3/@claude-flow/cli/package.json'
       - '.github/workflows/helpers-manifest-guard.yml'
+      - 'tests/helpers-manifest-ci-security.test.cjs'
   push:
     branches: [main]
     paths:
@@ -33,6 +34,11 @@ on:
       - 'scripts/smoke-helper-signing-security.mjs'
       - 'v3/@claude-flow/cli/scripts/prepare-publish.mjs'
       - 'v3/@claude-flow/cli/package.json'
+      - '.github/workflows/helpers-manifest-guard.yml'
+      - 'tests/helpers-manifest-ci-security.test.cjs'
+
+permissions:
+  contents: read
 
 jobs:
   guard:
@@ -41,7 +47,10 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22.23.5'
+
+      - name: CI security regression (dependency-free)
+        run: node --test tests/helpers-manifest-ci-security.test.cjs
 
       # 1. The scripts themselves must exist. If either is deleted, the
       #    prepublishOnly command below silently no-ops on that step and
