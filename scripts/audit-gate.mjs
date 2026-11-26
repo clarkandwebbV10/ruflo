@@ -30,21 +30,60 @@ const RANK = { info: 0, low: 1, moderate: 2, high: 3, critical: 4 };
 const GHSA_RE = /^GHSA(-[23456789cfghjmpqrvwx]{4}){3}$/;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
-/** Advisories in an `npm audit --json` report, keyed by `package GHSA`. */
+/** Advisories in a complete npm audit v2 report, keyed by `package GHSA`. */
 export function collectAdvisories(report) {
-  if (!report || typeof report !== 'object' || !report.metadata || typeof report.vulnerabilities !== 'object') {
-    throw new Error('not a valid npm audit --json report');
+  const isRecord = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
+  const severities = Object.keys(RANK);
+  const counts = report?.metadata?.vulnerabilities;
+  if (!isRecord(report) || report.auditReportVersion !== 2 || report.error ||
+      !isRecord(report.vulnerabilities) || !isRecord(counts)) {
+    throw new Error('not a valid npm audit --json v2 report');
   }
+  const actual = Object.fromEntries(severities.map((s) => [s, 0]));
+  const entries = Object.entries(report.vulnerabilities);
   const found = new Map();
-  for (const entry of Object.values(report.vulnerabilities)) {
-    for (const via of entry.via ?? []) {
-      if (!via || typeof via !== 'object') continue; // string = transitive pointer
-      const advisory = String(via.url ?? '').split('/').pop();
+  const links = new Map();
+  const direct = new Set();
+  for (const [name, entry] of entries) {
+    if (!isRecord(entry) || !Object.hasOwn(RANK, entry.severity) ||
+        !Array.isArray(entry.via) || entry.via.length === 0) {
+      throw new Error('malformed npm audit vulnerability entry');
+    }
+    actual[entry.severity] += 1;
+    links.set(name, []);
+    for (const via of entry.via) {
+      if (typeof via === 'string') {
+        if (!Object.hasOwn(report.vulnerabilities, via)) throw new Error('unresolved npm audit transitive pointer');
+        links.get(name).push(via);
+        continue;
+      }
+      if (!isRecord(via) || typeof via.url !== 'string' ||
+          !Object.hasOwn(RANK, via.severity)) {
+        throw new Error('malformed npm audit advisory');
+      }
+      const advisory = via.url.split('/').pop();
       const pkg = via.name ?? via.dependency;
-      if (!pkg || !advisory) continue;
+      if (typeof pkg !== 'string' || !pkg.trim() || !advisory) throw new Error('incomplete npm audit advisory');
+      direct.add(name);
       found.set(`${pkg} ${advisory}`, { package: pkg, advisory, severity: via.severity, title: via.title ?? '' });
     }
   }
+  for (const severity of severities) {
+    if (counts[severity] !== actual[severity]) throw new Error('npm audit severity counts do not match entries');
+  }
+  if (counts.total !== entries.length) throw new Error('npm audit total does not match entries');
+  // A transitive-only component without any concrete advisory is not evidence.
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const [name, dependencies] of links) {
+      if (!direct.has(name) && dependencies.some((dependency) => direct.has(dependency))) {
+        direct.add(name);
+        changed = true;
+      }
+    }
+  }
+  if (direct.size !== entries.length) throw new Error('npm audit entry has no concrete advisory');
   return found;
 }
 
