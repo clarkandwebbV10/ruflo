@@ -4,10 +4,17 @@ on:
     paths:
       - '.claude-plugin/**'
       - 'plugins/**'
+      - '.github/workflows/validate-marketplace.yml'
+      - 'tests/marketplace-ci-security.test.cjs'
   pull_request:
     paths:
       - '.claude-plugin/**'
       - 'plugins/**'
+      - '.github/workflows/validate-marketplace.yml'
+      - 'tests/marketplace-ci-security.test.cjs'
+
+permissions:
+  contents: read
 
 jobs:
   validate:
@@ -16,7 +23,9 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22.23.5'
+      - name: Verify marketplace CI security configuration
+        run: node --test tests/marketplace-ci-security.test.cjs
       - name: Validate marketplace.json
         run: |
           node -e "
