@@ -1,0 +1,49 @@
+name: Verify workspace dependency lock
+on:
+  pull_request:
+    paths:
+      - .github/workflows/verify-workspace-lock.yml
+permissions:
+  contents: read
+jobs:
+  resolve:
+    if: github.event.pull_request.number == 1 && github.head_ref == 'security/vite-rce-20261119'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Resolve the lock with install scripts disabled
+        run: npm install --package-lock-only --ignore-scripts --no-fund --no-audit --fetch-retries=1 --fetch-timeout=30000
+      - name: Check workspace resolution and overridden dependency versions
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import {readFileSync} from 'node:fs';
+          const {packages} = JSON.parse(readFileSync('package-lock.json', 'utf8'));
+          assert.deepEqual(packages['node_modules/@claude-flow/mcp'], {resolved: 'v3/@claude-flow/mcp', link: true});
+          for (const [name, major, minor, patch] of [['vite', 8, 3, 8], ['@modelcontextprotocol/sdk', 1, 32, 0]]) {
+            const entries = Object.entries(packages).filter(([path]) => path.endsWith('/node_modules/' + name) || path === 'node_modules/' + name);
+            assert.ok(entries.length > 0, name + ' missing');
+            for (const [path, unit] of entries) {
+              const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(unit.version);
+              assert.ok(match, path + ' needs a stable version');
+              const [a,b,c] = match.slice(1).map(Number);
+              assert.ok(a === major && (b > minor || (b === minor && c >= patch)), path + '@' + unit.version);
+              console.log(path + '@' + unit.version);
+            }
+          }
+          NODE
+      - name: Perform a clean install from the generated lock
+        run: npm ci --ignore-scripts --no-fund --no-audit --fetch-retries=1 --fetch-timeout=30000
+      - name: Save the verified lock
+        uses: actions/upload-artifact@v4
+        with:
+          name: verified-ruflo-dependency-lock
+          path: package-lock.json
+          retention-days: 3
