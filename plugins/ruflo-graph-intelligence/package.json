@@ -23,7 +23,8 @@
     "zod": "^3.22.4"
   },
   "overrides": {
-    "ws": ">=8.21.0"
+    "ws": ">=8.21.0",
+    "proxy-addr": "2.0.8"
   },
   "peerDependencies": {
     "@claude-flow/cli": ">=3.5.0"
