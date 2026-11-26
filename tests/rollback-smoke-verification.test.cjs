@@ -75,8 +75,11 @@ function namedStepScript(name) {
   return body.join('\n');
 }
 
-test('SEC-018: root build:ts masks errors; direct CLI build script is tsc', () => {
-  assert.match(packageJson.scripts['build:ts'], /\|\|\s*true/);
+// Originally pinned the masking `|| true` as a precondition for the rollback
+// bypass. SEC-018/036 (PR #23) removed it from the shared alias; the rollback
+// steps below still call the CLI build directly, so both layers now fail closed.
+test('SEC-018: root build:ts no longer masks errors; direct CLI build script is tsc', () => {
+  assert.doesNotMatch(packageJson.scripts['build:ts'], /\|\|\s*true/);
   const cliPkg = JSON.parse(fs.readFileSync(path.join(repoRoot, 'v3/@claude-flow/cli/package.json'), 'utf8'));
   assert.equal(cliPkg.scripts.build, 'tsc');
 });
