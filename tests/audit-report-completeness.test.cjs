@@ -61,3 +61,21 @@ test('identical advisory repetitions remain blocking and are deduplicated', asyn
   assert.equal(full.size, 1);
   assert.equal(evaluate({ full, prod: collectAdvisories(report()), exceptions: [], today: '2026-11-26' }).ok, false);
 });
+
+test('audit process termination and unexpected exit statuses fail closed', async () => {
+  const { parseAuditRun } = await import('../scripts/audit-gate.mjs');
+  const stdout = JSON.stringify(report());
+  for (const result of [{ status: null, signal: 'SIGTERM', stdout }, { status: 2, signal: null, stdout }, { status: 127, signal: null, stdout }, { status: null, signal: null, stdout }]) {
+    assert.throws(() => parseAuditRun(result), /did not complete/);
+  }
+  assert.throws(() => parseAuditRun({ error: new Error('fixture spawn failure'), stdout }), /fixture spawn failure/);
+});
+test('completed audit process reports remain subject to evidence validation', async () => {
+  const { parseAuditRun, collectAdvisories, evaluate } = await import('../scripts/audit-gate.mjs');
+  const full = collectAdvisories(parseAuditRun({ status: 1, signal: null, stdout: JSON.stringify(report({
+    'fixture-dependency': { severity: 'high', via: [advisory] },
+  })) }));
+  const prod = collectAdvisories(parseAuditRun({ status: 0, signal: null, stdout: JSON.stringify(report()) }));
+  assert.equal(evaluate({ full, prod, exceptions: [], today: '2026-11-26' }).ok, false);
+  assert.equal(evaluate({ full: prod, prod, exceptions: [], today: '2026-11-26' }).ok, true);
+});
