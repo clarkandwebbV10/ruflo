@@ -1,3 +1,4 @@
+// ratchet-install-tree: ruflo/src/ruvocal/mcp-bridge
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';

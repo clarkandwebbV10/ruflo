@@ -7,8 +7,10 @@ import fs from "fs";
 const envPath = resolve(__dirname, "../../.env");
 dotenv.config({ path: envPath });
 
-// Read the .env file content
-const envContent = fs.readFileSync(envPath, "utf-8");
+// Read the .env file content. Ruvocal's upstream commits a non-secret `.env`
+// of defaults; this repository never commits `.env` files, so tests must not
+// depend on one existing. A local `.env` is still honored when present.
+const envContent = fs.existsSync(envPath) ? fs.readFileSync(envPath, "utf-8") : "";
 
 // Parse the .env content
 const envVars = dotenv.parse(envContent);

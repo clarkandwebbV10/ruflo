@@ -1,0 +1,119 @@
+name: Dependency security regressions
+
+# Runs the node:test dependency-security regressions that assert on a
+# sub-package's OWN install tree (SEC-010/011 for the v3 pnpm workspace,
+# SEC-066 for Ruvocal, its MCP bridge and the graph-intelligence plugin).
+#
+# Each such test declares `// ratchet-install-tree: <dir>`. The root CI test
+# ratchet (scripts/ci-test-ratchet.mjs) only installs the root tree, so it lists
+# these as deferred; this workflow is where they actually run, each against a
+# frozen install of exactly the lockfile that ships. Lifecycle scripts are
+# disabled: these tests inspect resolved packages, they do not need builds.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'v3/package.json'
+      - 'v3/pnpm-lock.yaml'
+      - 'v3/tests/security/**'
+      - 'ruflo/src/ruvocal/package.json'
+      - 'ruflo/src/ruvocal/package-lock.json'
+      - 'ruflo/src/ruvocal/*.test.mjs'
+      - 'ruflo/src/ruvocal/docker-compose.yml'
+      - 'ruflo/src/ruvocal/test-compose-loopback.cjs'
+      - 'ruflo/src/ruvocal/mcp-bridge/package.json'
+      - 'ruflo/src/ruvocal/mcp-bridge/package-lock.json'
+      - 'ruflo/src/ruvocal/mcp-bridge/*.test.mjs'
+      - 'plugins/ruflo-graph-intelligence/package.json'
+      - 'plugins/ruflo-graph-intelligence/package-lock.json'
+      - 'plugins/ruflo-graph-intelligence/*.test.mjs'
+      - 'scripts/ci-test-ratchet.mjs'
+      - '.github/workflows/dependency-security-regressions.yml'
+  pull_request:
+    paths:
+      - 'v3/package.json'
+      - 'v3/pnpm-lock.yaml'
+      - 'v3/tests/security/**'
+      - 'ruflo/src/ruvocal/package.json'
+      - 'ruflo/src/ruvocal/package-lock.json'
+      - 'ruflo/src/ruvocal/*.test.mjs'
+      - 'ruflo/src/ruvocal/docker-compose.yml'
+      - 'ruflo/src/ruvocal/test-compose-loopback.cjs'
+      - 'ruflo/src/ruvocal/mcp-bridge/package.json'
+      - 'ruflo/src/ruvocal/mcp-bridge/package-lock.json'
+      - 'ruflo/src/ruvocal/mcp-bridge/*.test.mjs'
+      - 'plugins/ruflo-graph-intelligence/package.json'
+      - 'plugins/ruflo-graph-intelligence/package-lock.json'
+      - 'plugins/ruflo-graph-intelligence/*.test.mjs'
+      - 'scripts/ci-test-ratchet.mjs'
+      - '.github/workflows/dependency-security-regressions.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  install-tree:
+    name: ${{ matrix.tree }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - tree: v3
+            installer: pnpm
+          - tree: ruflo/src/ruvocal
+            installer: npm
+          - tree: ruflo/src/ruvocal/mcp-bridge
+            installer: npm
+          - tree: plugins/ruflo-graph-intelligence
+            installer: npm
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.23.5'
+
+      - name: Assert patched Node runtime
+        run: node -e "if (process.version !== 'v22.23.5') { console.error('unexpected Node ' + process.version); process.exit(1); }"
+
+      - name: Setup pnpm
+        if: matrix.installer == 'pnpm'
+        uses: pnpm/action-setup@v6
+        with:
+          version: '8'
+
+      - name: Frozen install (${{ matrix.installer }}, no lifecycle scripts)
+        working-directory: ${{ matrix.tree }}
+        run: |
+          if [ "${{ matrix.installer }}" = pnpm ]; then
+            pnpm install --frozen-lockfile --ignore-scripts
+          else
+            npm ci --ignore-scripts --no-audit --no-fund
+          fi
+
+      - name: Run the tree's declared regressions
+        env:
+          TREE: ${{ matrix.tree }}
+        run: |
+          set -euo pipefail
+          files=$(node --input-type=module -e "
+            const { discoverNodeTestFiles } = await import('./scripts/ci-test-ratchet.mjs');
+            const hits = discoverNodeTestFiles().filter((f) => f.installTree === process.env.TREE);
+            console.log(hits.map((f) => f.name).join('\n'));")
+          if [ -z "$files" ]; then
+            echo "::error::no regressions declare ratchet-install-tree: $TREE"
+            exit 1
+          fi
+          echo "$files"
+          # shellcheck disable=SC2086
+          node --test $files
+
+      - name: Ruvocal development MongoDB publishes on loopback only
+        if: matrix.tree == 'ruflo/src/ruvocal'
+        run: node ruflo/src/ruvocal/test-compose-loopback.cjs
