@@ -7,7 +7,7 @@ permissions:
   contents: read
 jobs:
   resolve:
-    if: github.event.pull_request.number == 1 && github.head_ref == 'security/vite-rce-20261119'
+    if: github.base_ref == 'security/vite-rce-20261119' && github.head_ref == 'build/verify-ruflo-lock-20261125'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
