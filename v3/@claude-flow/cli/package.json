@@ -81,7 +81,9 @@
     "catalog-manifest.json"
   ],
   "scripts": {
+    "prebuild": "npm --prefix ../security run build && tsc -b ../shared ../swarm",
     "build": "tsc",
+    "lint": "node scripts/lint-adr078.mjs",
     "check:metaharness-pins": "node ../../../scripts/check-metaharness-pins.mjs",
     "test": "vitest run",
     "test:plugin-store": "npx tsx src/plugins/tests/standalone-test.ts",
@@ -121,7 +123,6 @@
     "inquirer": "^9.2.0",
     "semver": "7.7.3",
     "sql.js": "^1.13.0",
-    "toml": "^3.0.0",
     "ws": "^8.21.0",
     "yaml": "^2.8.0",
     "zod": "^3.22.0"

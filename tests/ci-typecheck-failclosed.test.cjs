@@ -26,7 +26,7 @@ function getTypecheckStep(yaml) {
 function execute(command, mode) {
   const disposition = mode === 'fail' ? 'return 17' : 'return 0';
   const shim = 'npm() { printf "mock-call:%s\\n" "$*"; ' +
-    'if [ "$*" != "run build -- --noEmit" ]; then return 23; fi; ' +
+    'if [ "$*" != "run typecheck" ]; then return 23; fi; ' +
     disposition + '; }\n' + command;
   const scratch = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'mc2-sec034-'));
   try {
@@ -45,13 +45,15 @@ function execute(command, mode) {
 
 const { step, command } = getTypecheckStep(workflow);
 
-test('actual root build script uses TypeScript compiler', () => {
+test('root typecheck script runs the CLI compiler without emitting and without masking', () => {
   assert.equal(manifest.scripts.build, 'tsc');
-  assert.equal(manifest.scripts.typecheck, undefined);
+  assert.equal(manifest.scripts.typecheck,
+    'npm --prefix v3/@claude-flow/cli run prebuild && tsc --noEmit -p v3/@claude-flow/cli');
+  assert.doesNotMatch(manifest.scripts.typecheck, /\|\||;\s*(true|echo|exit\s+0)\b/);
 });
 
-test('CI type check invokes compiler without emitting build artifacts', () => {
-  assert.equal(command, 'npm run build -- --noEmit');
+test('CI type check invokes the real typecheck script', () => {
+  assert.equal(command, 'npm run typecheck');
 });
 
 test('CI type checking is not allowed to continue on error', () => {
@@ -62,13 +64,13 @@ test('CI type checking is not allowed to continue on error', () => {
 test('compiler success preserves a green status', () => {
   const result = execute(command, 'success');
   assert.equal(result.status, 0, result.stderr);
-  assert.deepEqual(result.calls, ['run build -- --noEmit']);
+  assert.deepEqual(result.calls, ['run typecheck']);
 });
 
 test('compiler failure is propagated as a red status', () => {
   const result = execute(command, 'fail');
   assert.equal(result.status, 17, result.stderr);
-  assert.deepEqual(result.calls, ['run build -- --noEmit']);
+  assert.deepEqual(result.calls, ['run typecheck']);
 });
 
 test('old nonexistent script and swallowed failure reproduce false-green behavior', () => {

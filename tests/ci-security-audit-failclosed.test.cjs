@@ -1,5 +1,9 @@
 // SEC-033: the CI security audit must block on material dependency findings.
-// Dependency-free; uses isolated mock npm to test the actual workflow shell.
+// The CI step runs scripts/audit-gate.mjs, which performs the full-tree
+// (high+) and production-tree (moderate+) scans and allows only reviewed,
+// expiring exceptions from config/audit-exceptions.json. Dependency-free:
+// behavior is tested against recorded npm audit JSON fixtures, never the
+// network.
 'use strict';
 
 const test = require('node:test');
@@ -9,7 +13,9 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
-const workflow = fs.readFileSync(path.join(__dirname, '..', '.github', 'workflows', 'ci.yml'), 'utf8');
+const root = path.join(__dirname, '..');
+const gate = path.join(root, 'scripts', 'audit-gate.mjs');
+const workflow = fs.readFileSync(path.join(root, '.github', 'workflows', 'ci.yml'), 'utf8');
 
 function auditStep(text) {
   const start = text.indexOf('      - name: Run security audit\n');
@@ -19,34 +25,41 @@ function auditStep(text) {
   const block = text.slice(start, next);
   const match = block.match(/        run: \|\n((?:          [^\n]*\n)+)/);
   assert.ok(match, 'audit is a multiline shell step');
-  return { block, script: match[1].split('\n').filter(Boolean).map(line => line.slice(10)).join('\n') };
+  return { block, script: match[1].split('\n').filter(Boolean).map((line) => line.slice(10)).join('\n') };
 }
 
-function simulate(script, mode) {
-  // Use an on-disk Bash fixture, never a real npm executable or OS-specific PATH.
-  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'mc2-sec033-'));
+function report(advisories) {
+  const vulnerabilities = {};
+  for (const a of advisories) {
+    vulnerabilities[a.name] ??= { name: a.name, severity: a.severity, via: [] };
+    vulnerabilities[a.name].via.push({ name: a.name, severity: a.severity, title: 't', url: `https://github.com/advisories/${a.ghsa}` });
+  }
+  return { auditReportVersion: 2, vulnerabilities, metadata: { vulnerabilities: {} } };
+}
+
+const HIGH = { name: 'pkg-high', severity: 'high', ghsa: 'GHSA-2222-3333-4444' };
+const MOD = { name: 'pkg-mod', severity: 'moderate', ghsa: 'GHSA-5555-6666-7777' };
+const exception = (a, expires = '2099-01-01') => ({
+  package: a.name, advisory: a.ghsa, reason: 'reviewed: semver-major fix tracked separately', remediation: 'upgrade', expires,
+});
+
+function runGate({ full = [], prod = [], exceptions = [], today = '2026-11-26', raw }) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sec033-'));
   try {
-    const mock = [
-      'npm() {',
-      '  printf "MC2_AUDIT_CALL:%s\\n" "$*"',
-      '  if [ "$MOCK_MODE" = "full" ] && [ "$*" = "audit --audit-level=high" ]; then return 42; fi',
-      '  if [ "$MOCK_MODE" = "prod" ] && [ "$*" = "audit --omit=dev --audit-level=moderate" ]; then return 43; fi',
-      '  return 0',
-      '}',
-    ].join('\n') + '\n';
-    assert.ok(['clean', 'full', 'prod'].includes(mode));
-    fs.writeFileSync(path.join(scratch, 'run.sh'), 'MOCK_MODE=' + mode + '\n' + mock + script, 'utf8');
-    // Bash's working directory must be the PARENT to avoid Windows EBUSY at cleanup.
-    const execution = spawnSync('bash', ['./' + path.basename(scratch) + '/run.sh'], {
-      cwd: os.tmpdir(), encoding: 'utf8', timeout: 6000,
-    });
-    assert.ifError(execution.error);
-    const calls = execution.stdout.split(/\r?\n/)
-      .filter(line => line.startsWith('MC2_AUDIT_CALL:'))
-      .map(line => line.slice('MC2_AUDIT_CALL:'.length));
-    return { status: execution.status, calls, stderr: execution.stderr };
+    const write = (name, value) => {
+      const file = path.join(dir, name);
+      fs.writeFileSync(file, typeof value === 'string' ? value : JSON.stringify(value));
+      return file;
+    };
+    const args = [gate,
+      '--input-all', write('all.json', raw ?? report(full)),
+      '--input-prod', write('prod.json', report(prod)),
+      '--exceptions', write('exceptions.json', { exceptions }),
+      '--today', today];
+    const r = spawnSync(process.execPath, args, { encoding: 'utf8', timeout: 20000 });
+    return { status: r.status, out: r.stdout + r.stderr };
   } finally {
-    fs.rmSync(scratch, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   }
 }
 
@@ -58,35 +71,62 @@ test('required audit is not continue-on-error or swallowed by echo', () => {
   assert.match(script, /^set -euo pipefail/m);
 });
 
-test('full dependency audit blocks on high findings', () => {
-  assert.match(script, /^npm audit --audit-level=high$/m);
+test('CI runs the fail-closed audit gate', () => {
+  assert.match(script, /^node scripts\/audit-gate\.mjs$/m);
 });
 
-test('production-only audit blocks on moderate findings', () => {
-  assert.match(script, /^npm audit --omit=dev --audit-level=moderate$/m);
+test('the committed exception list is well-formed and every entry expires', async () => {
+  const { validateExceptions } = await import(require('node:url').pathToFileURL(gate).href);
+  const { exceptions } = JSON.parse(fs.readFileSync(path.join(root, 'config', 'audit-exceptions.json'), 'utf8'));
+  assert.deepEqual(validateExceptions(exceptions), []);
 });
 
-test('clean scans run both audit commands and succeed', () => {
-  const r = simulate(script, 'clean');
-  assert.equal(r.status, 0, r.stderr);
-  assert.deepEqual(r.calls, ['audit --audit-level=high', 'audit --omit=dev --audit-level=moderate']);
+test('clean scans pass', () => {
+  const r = runGate({});
+  assert.equal(r.status, 0, r.out);
 });
 
-test('high vulnerability in full tree fails the shell and skips production scan', () => {
-  const r = simulate(script, 'full');
-  assert.equal(r.status, 42, r.stderr);
-  assert.deepEqual(r.calls, ['audit --audit-level=high']);
+test('an unexcepted high advisory in the full tree blocks', () => {
+  const r = runGate({ full: [HIGH] });
+  assert.equal(r.status, 1, r.out);
+  assert.match(r.out, /BLOCKING \(full scan\) high pkg-high GHSA-2222-3333-4444/);
 });
 
-test('moderate production vulnerability fails the shell', () => {
-  const r = simulate(script, 'prod');
-  assert.equal(r.status, 43, r.stderr);
-  assert.deepEqual(r.calls, ['audit --audit-level=high', 'audit --omit=dev --audit-level=moderate']);
+test('a moderate advisory blocks in production but not in the dev-only full tree', () => {
+  assert.equal(runGate({ full: [MOD], prod: [MOD] }).status, 1);
+  assert.equal(runGate({ full: [MOD] }).status, 0);
+});
+
+test('a reviewed, unexpired exception allows exactly its advisory', () => {
+  assert.equal(runGate({ full: [HIGH], exceptions: [exception(HIGH)] }).status, 0);
+  const other = { ...HIGH, ghsa: 'GHSA-8888-9999-cccc' };
+  assert.equal(runGate({ full: [HIGH, other], exceptions: [exception(HIGH)] }).status, 1);
+});
+
+test('an expired exception blocks', () => {
+  const r = runGate({ full: [HIGH], exceptions: [exception(HIGH, '2026-11-01')] });
+  assert.equal(r.status, 1, r.out);
+  assert.match(r.out, /EXPIRED exception pkg-high/);
+});
+
+test('a stale exception blocks so the list can only shrink', () => {
+  const r = runGate({ exceptions: [exception(HIGH)] });
+  assert.equal(r.status, 1, r.out);
+  assert.match(r.out, /STALE exception pkg-high GHSA-2222-3333-4444/);
+});
+
+test('an exception without a substantive reason is rejected', () => {
+  const r = runGate({ full: [HIGH], exceptions: [{ ...exception(HIGH), reason: 'ok' }] });
+  assert.equal(r.status, 1, r.out);
+});
+
+test('an unreadable audit report fails closed', () => {
+  const r = runGate({ raw: '{"error":{"code":"ENOAUDIT"}}' });
+  assert.equal(r.status, 2, r.out);
 });
 
 test('old nonblocking audit reproduces false-green failure', () => {
-  const old = 'npm audit --audit-level=high || echo ignored\n' +
-              'npm audit --omit=dev --audit-level=moderate || echo ignored';
-  assert.equal(simulate(old, 'full').status, 0);
-  assert.equal(simulate(old, 'prod').status, 0);
+  const old = 'npm() { return 42; }\nnpm audit --audit-level=high || echo ignored\n';
+  const r = spawnSync('bash', ['-c', old], { encoding: 'utf8' });
+  assert.equal(r.status, 0);
 });

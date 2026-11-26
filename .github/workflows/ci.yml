@@ -34,17 +34,23 @@ jobs:
         uses: ./.github/actions/npm-ci-retry
 
       - name: Run security audit
+        # Full tree blocks on high+, production tree on moderate+. Only reviewed,
+        # expiring exceptions in config/audit-exceptions.json are allowed; any
+        # new, expired or stale entry fails (see scripts/audit-gate.mjs).
         run: |
           set -euo pipefail
-          npm audit --audit-level=high
-          npm audit --omit=dev --audit-level=moderate
+          node scripts/audit-gate.mjs
         
       - name: Lint code
         run: npm run lint
 
       - name: Type check
-        # Root package.json defines build=tsc, not typecheck. Fail on compiler errors.
-        run: npm run build -- --noEmit
+        # Fail closed on compiler errors in the shipped CLI, using its own
+        # tsconfig after building the workspace packages it references. The
+        # root tsconfig sweeps all of v3/** (experimental plugins, goal_ui, ...)
+        # under settings those packages do not use; per-package checks run in
+        # v3-ci (`pnpm typecheck`).
+        run: npm run typecheck
 
       - name: Check for outdated dependencies
         run: npm outdated || true
