@@ -19,13 +19,18 @@ on:
       - 'scripts/smoke-all-plugins.mjs'
       - 'scripts/audit-plugin-mcp-prefix.mjs'
       - '.github/workflows/all-plugins-smoke.yml'
+      - 'tests/all-plugins-ci-security.test.cjs'
   pull_request:
     paths:
       - 'plugins/**'
       - 'scripts/smoke-all-plugins.mjs'
       - 'scripts/audit-plugin-mcp-prefix.mjs'
       - '.github/workflows/all-plugins-smoke.yml'
+      - 'tests/all-plugins-ci-security.test.cjs'
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   smoke-all:
@@ -36,7 +41,10 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22.23.5'
+
+      - name: Verify all-plugins workflow security invariants
+        run: node --test tests/all-plugins-ci-security.test.cjs
 
       - name: Discover and run every plugin smoke contract (parallel)
         # --timeout 300 caps each individual plugin smoke at 5 minutes.
