@@ -65,7 +65,12 @@ export function collectAdvisories(report) {
       const pkg = via.name ?? via.dependency;
       if (typeof pkg !== 'string' || !pkg.trim() || !advisory) throw new Error('incomplete npm audit advisory');
       direct.add(name);
-      found.set(`${pkg} ${advisory}`, { package: pkg, advisory, severity: via.severity, title: via.title ?? '' });
+      const key = `${pkg} ${advisory}`;
+      const previous = found.get(key);
+      if (previous && previous.severity !== via.severity) {
+        throw new Error('conflicting npm audit advisory severities');
+      }
+      found.set(key, { package: pkg, advisory, severity: via.severity, title: via.title ?? '' });
     }
   }
   for (const severity of severities) {
