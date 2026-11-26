@@ -132,8 +132,16 @@ function runAudit(omitDev) {
   const run = spawnSync(process.platform === 'win32' ? 'npm.cmd' : 'npm', args, {
     cwd: REPO_ROOT, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, shell: process.platform === 'win32',
   });
+  return parseAuditRun(run);
+}
+
+/** A terminated or failed subprocess is not a completed audit. */
+export function parseAuditRun(run) {
   if (run.error) throw run.error;
-  // npm audit exits 1 when it finds advisories; the JSON report is what counts.
+  if (run.signal || (run.status !== 0 && run.status !== 1)) {
+    throw new Error('npm audit did not complete with an expected exit status');
+  }
+  // npm audit exits 1 when it finds advisories; still validate the JSON report.
   return JSON.parse(run.stdout);
 }
 
