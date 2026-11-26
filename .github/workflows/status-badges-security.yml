@@ -1,0 +1,18 @@
+name: Status badge provenance security
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/status-badges.yml'
+      - '.github/workflows/status-badges-security.yml'
+      - 'scripts/__tests__/status_badges_security_test.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  provenance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify badge event provenance and shell boundary
+        run: python -m unittest discover -s scripts/__tests__ -p 'status_badges_security_test.py' -v
