@@ -10,7 +10,7 @@ on:
     - cron: '0 2 * * *'
 
 env:
-  NODE_VERSION: '20'
+  NODE_VERSION: '22.23.5'
 
 jobs:
   # Code quality and security checks
@@ -27,21 +27,30 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
 
+      - name: Verify shared CI Node security patch floor
+        run: node --test tests/ci-supported-node.test.cjs tests/ci-security-audit-failclosed.test.cjs tests/ci-typecheck-failclosed.test.cjs tests/ci-cli-smoke-failclosed.test.cjs
+
       - name: Install dependencies
         uses: ./.github/actions/npm-ci-retry
 
       - name: Run security audit
+        # Full tree blocks on high+, production tree on moderate+. Only reviewed,
+        # expiring exceptions in config/audit-exceptions.json are allowed; any
+        # new, expired or stale entry fails (see scripts/audit-gate.mjs).
         run: |
-          npm audit --audit-level=high || echo "⚠️ Security vulnerabilities found (non-blocking)"
-          npm audit --production --audit-level=moderate || echo "⚠️ Production vulnerabilities found (non-blocking)"
-        continue-on-error: true
+          set -euo pipefail
+          node scripts/audit-gate.mjs
         
       - name: Lint code
         run: npm run lint
 
       - name: Type check
-        run: npm run typecheck || echo "⚠️ Type checking skipped (TypeScript compiler crash)"
-        continue-on-error: true
+        # Fail closed on compiler errors in the shipped CLI, using its own
+        # tsconfig after building the workspace packages it references. The
+        # root tsconfig sweeps all of v3/** (experimental plugins, goal_ui, ...)
+        # under settings those packages do not use; per-package checks run in
+        # v3-ci (`pnpm typecheck`).
+        run: npm run typecheck
 
       - name: Check for outdated dependencies
         run: npm outdated || true
@@ -162,13 +171,11 @@ jobs:
         run: |
           chmod +x ./v3/@claude-flow/cli/bin/cli.js
           node ./v3/@claude-flow/cli/bin/cli.js --version
-        continue-on-error: true
 
       - name: Test CLI binary (Windows)
         if: runner.os == 'Windows'
         run: |
           node ./v3/@claude-flow/cli/bin/cli.js --version
-        continue-on-error: true
 
       - name: Daemon survives parent exit (Windows, regression #1766)
         if: runner.os == 'Windows'
@@ -308,8 +315,18 @@ jobs:
     
     steps:
       - name: Check overall status
+        # Run regardless of upstream outcomes, but never certify failed/skipped jobs.
+        env:
+          SECURITY_RESULT: ${{ needs.security.result }}
+          TEST_RESULT: ${{ needs.test.result }}
+          BUILD_RESULT: ${{ needs.build.result }}
+        shell: bash
         run: |
-          echo "✅ CI Pipeline completed"
-          echo "Security: ${{ needs.security.result }}"
-          echo "Test: ${{ needs.test.result }}"
-          echo "Build: ${{ needs.build.result }}"
+          echo "Security: $SECURITY_RESULT"
+          echo "Test: $TEST_RESULT"
+          echo "Build: $BUILD_RESULT"
+          if [ "$SECURITY_RESULT" != "success" ] || [ "$TEST_RESULT" != "success" ] || [ "$BUILD_RESULT" != "success" ]; then
+            echo "::error::CI status failed: security, test and build must all succeed"
+            exit 1
+          fi
+          echo "✅ CI Pipeline completed successfully"

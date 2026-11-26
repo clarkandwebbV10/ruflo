@@ -1,0 +1,86 @@
+// SEC-034: CI type checking must execute a real manifest script and fail closed.
+'use strict';
+
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const { spawnSync } = require('node:child_process');
+
+const root = path.join(__dirname, '..');
+const workflow = fs.readFileSync(path.join(root, '.github', 'workflows', 'ci.yml'), 'utf8');
+const manifest = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
+const marker = '      - name: Type check\n';
+
+function getTypecheckStep(yaml) {
+  assert.equal(yaml.split(marker).length, 2, 'expected one Type check step');
+  const rest = yaml.split(marker)[1];
+  const end = rest.indexOf('\n      - name:');
+  assert.ok(end > 0, 'type check step must be followed by another step');
+  const step = rest.slice(0, end);
+  const run = step.match(/^        run: (.+)$/m);
+  assert.ok(run, 'type check step must contain a shell command');
+  return { step, command: run[1] };
+}
+
+function execute(command, mode) {
+  const disposition = mode === 'fail' ? 'return 17' : 'return 0';
+  const shim = 'npm() { printf "mock-call:%s\\n" "$*"; ' +
+    'if [ "$*" != "run typecheck" ]; then return 23; fi; ' +
+    disposition + '; }\n' + command;
+  const scratch = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'mc2-sec034-'));
+  try {
+    fs.writeFileSync(path.join(scratch, 'run.sh'), shim, 'utf8');
+    const result = spawnSync('bash', ['-e', './' + path.basename(scratch) + '/run.sh'], {
+      cwd: require('node:os').tmpdir(), encoding: 'utf8', timeout: 5000,
+    });
+    assert.ifError(result.error);
+    return { status: result.status,
+      calls: result.stdout.split(/\r?\n/).filter(line => line.startsWith('mock-call:'))
+        .map(line => line.slice('mock-call:'.length)), stderr: result.stderr };
+  } finally {
+    fs.rmSync(scratch, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+  }
+}
+
+const { step, command } = getTypecheckStep(workflow);
+
+test('root typecheck script runs the CLI compiler without emitting and without masking', () => {
+  assert.equal(manifest.scripts.build, 'tsc');
+  assert.equal(manifest.scripts.typecheck,
+    'npm --prefix v3/@claude-flow/cli run prebuild && tsc --noEmit -p v3/@claude-flow/cli');
+  assert.doesNotMatch(manifest.scripts.typecheck, /\|\||;\s*(true|echo|exit\s+0)\b/);
+});
+
+test('CI type check invokes the real typecheck script', () => {
+  assert.equal(command, 'npm run typecheck');
+});
+
+test('CI type checking is not allowed to continue on error', () => {
+  assert.doesNotMatch(step, /continue-on-error\s*:\s*true/);
+  assert.doesNotMatch(command, /\|\||;\s*(true|echo)\b/);
+});
+
+test('compiler success preserves a green status', () => {
+  const result = execute(command, 'success');
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(result.calls, ['run typecheck']);
+});
+
+test('compiler failure is propagated as a red status', () => {
+  const result = execute(command, 'fail');
+  assert.equal(result.status, 17, result.stderr);
+  assert.deepEqual(result.calls, ['run typecheck']);
+});
+
+test('old nonexistent script and swallowed failure reproduce false-green behavior', () => {
+  const result = execute('npm run typecheck || echo skipped', 'fail');
+  assert.equal(result.status, 0);
+  assert.deepEqual(result.calls, ['run typecheck']);
+});
+
+test('type check guard runs in pre-install regression suite', () => {
+  const regression = workflow.indexOf('run: node --test tests/ci-supported-node.test.cjs tests/ci-security-audit-failclosed.test.cjs tests/ci-typecheck-failclosed.test.cjs');
+  const install = workflow.indexOf('uses: ./.github/actions/npm-ci-retry');
+  assert.ok(regression >= 0 && install > regression);
+});

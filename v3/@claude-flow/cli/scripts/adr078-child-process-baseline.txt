@@ -1,0 +1,49 @@
+# ADR-078 known debt: CLI source files that import child_process directly.
+# Enforced by scripts/lint-adr078.mjs (npm run lint). This list may only SHRINK:
+# a new importer fails lint, and a file that stops importing must be removed.
+# Allowlisted files (.eslintrc.json overrides) are not listed here.
+src/appliance/rvfa-builder.ts
+src/appliance/rvfa-runner.ts
+src/benchmarks/gaia-agent.ts
+src/benchmarks/gaia-critic.ts
+src/benchmarks/gaia-decomposer.ts
+src/benchmarks/gaia-judge.ts
+src/benchmarks/gaia-loader.ts
+src/benchmarks/gaia-tools/file_read.ts
+src/benchmarks/gaia-tools/grounded_query.ts
+src/commands/analyze.ts
+src/commands/doctor.ts
+src/commands/eject.ts
+src/commands/funnel.ts
+src/commands/hive-mind.ts
+src/commands/hooks.ts
+src/commands/init.ts
+src/commands/metaharness.ts
+src/commands/ruvector/import.ts
+src/commands/security.ts
+src/funnel/local-signals.ts
+src/mcp-client.ts
+src/mcp-tools/auto-install.ts
+src/mcp-tools/browser-session-tools.ts
+src/mcp-tools/browser-tools.ts
+src/mcp-tools/github-tools.ts
+src/mcp-tools/metaharness-tools.ts
+src/mcp-tools/terminal-tools.ts
+src/mcp-tools/testgen-tools.ts
+src/plugins/manager.ts
+src/proxy/lifecycle.ts
+src/runtime/claude-command.ts
+src/ruvector/diff-classifier.ts
+src/services/claim-service.ts
+src/services/container-worker-pool.ts
+src/services/daemon-autostart.ts
+src/services/distill-oracle.ts
+src/services/fable-harness.ts
+src/services/git-workspace-identity.ts
+src/services/harness-hosts.ts
+src/services/headless-worker-executor.ts
+src/services/memory-backup.ts
+src/services/policy-runtime.ts
+src/services/weight-eft.ts
+src/transfer/storage/gcs.ts
+src/update/executor.ts

@@ -1,0 +1,82 @@
+{
+  "$comment": "Reviewed npm audit exceptions for the root tree, enforced by scripts/audit-gate.mjs (CI 'Run security audit'). Each entry names ONE advisory for ONE package. An exception may only be added when the fix requires a semver-major upgrade that needs its own change; it must expire. The gate fails on any unlisted high/critical advisory (full tree) or moderate+ advisory (production tree), on any expired entry, and on any entry whose advisory is no longer reported, so this list can only shrink.",
+  "exceptions": [
+    {
+      "package": "zod",
+      "advisory": "GHSA-mrhx-c7xc-m3w5",
+      "reason": "Memory exhaustion validating oversized constrained collections. Fixed only in zod 4.6.6+; the repository pins zod 3.25.76 and its validation code uses the v3 API.",
+      "remediation": "Migrate to zod 4 (breaking API) in a dedicated change; until then bound input size before schema validation at system boundaries.",
+      "expires": "2027-01-31"
+    },
+    {
+      "package": "sharp",
+      "advisory": "GHSA-f88m-g3jw-g9cj",
+      "reason": "Inherited libvips vulnerabilities. sharp arrives transitively via agentic-flow 2.x (@huggingface/transformers); the only fix path is agentic-flow 3.5.5, a semver-major upgrade of a core runtime integration.",
+      "remediation": "Upgrade agentic-flow to 3.x in a dedicated change with integration testing.",
+      "expires": "2027-01-31"
+    },
+    {
+      "package": "sharp",
+      "advisory": "GHSA-rgj7-g3m4-5g8c",
+      "reason": "Inherited libheif vulnerabilities; same agentic-flow 2.x transitive path as GHSA-f88m-g3jw-g9cj.",
+      "remediation": "Upgrade agentic-flow to 3.x in a dedicated change with integration testing.",
+      "expires": "2027-01-31"
+    },
+    {
+      "package": "sharp",
+      "advisory": "GHSA-wq5f-xc86-pv6w",
+      "reason": "Inherited librsvg vulnerability; same agentic-flow 2.x transitive path as GHSA-f88m-g3jw-g9cj.",
+      "remediation": "Upgrade agentic-flow to 3.x in a dedicated change with integration testing.",
+      "expires": "2027-01-31"
+    },
+    {
+      "package": "glob",
+      "advisory": "GHSA-3g3m-2fjr-6pw4",
+      "reason": "AbortSignal cancellation bypass. Vulnerable glob is pinned by agentic-flow 2.x; npm audit's only fix is agentic-flow 3.5.5 (semver-major).",
+      "remediation": "Upgrade agentic-flow to 3.x in a dedicated change with integration testing.",
+      "expires": "2027-01-31"
+    },
+    {
+      "package": "minimatch",
+      "advisory": "GHSA-g3hv-75wg-m249",
+      "reason": "globparts amplification DoS, reached through the agentic-flow 2.x glob dependency; fix requires agentic-flow 3.5.5 (semver-major).",
+      "remediation": "Upgrade agentic-flow to 3.x in a dedicated change with integration testing.",
+      "expires": "2027-01-31"
+    },
+    {
+      "package": "tinypool",
+      "advisory": "GHSA-5gmw-xhrv-c9v3",
+      "reason": "Development-only: tinypool is the Vitest 3 worker pool, not shipped in any published package. Exploitation needs attacker control of worker options inside the local test run. Fixed only by Vitest 5 (semver-major).",
+      "remediation": "Upgrade the root test runner to Vitest 5 and re-baseline the CI test ratchet in a dedicated change.",
+      "expires": "2027-01-31"
+    },
+    {
+      "package": "tinypool",
+      "advisory": "GHSA-85c8-ppgw-ccpr",
+      "reason": "Development-only Vitest 3 worker pool; same conditions as GHSA-5gmw-xhrv-c9v3.",
+      "remediation": "Upgrade the root test runner to Vitest 5 and re-baseline the CI test ratchet in a dedicated change.",
+      "expires": "2027-01-31"
+    },
+    {
+      "package": "vitest",
+      "advisory": "GHSA-82fw-gwwq-j7x9",
+      "reason": "Development-only: affects the Vitest browser/mocker dev server, which the CI ratchet does not start. Fixed only by Vitest 5 (semver-major).",
+      "remediation": "Upgrade the root test runner to Vitest 5 in a dedicated change.",
+      "expires": "2027-01-31"
+    },
+    {
+      "package": "@vitest/mocker",
+      "advisory": "GHSA-82fw-gwwq-j7x9",
+      "reason": "Development-only; the same advisory as the vitest entry, reported for the mocker package itself.",
+      "remediation": "Upgrade the root test runner to Vitest 5 in a dedicated change.",
+      "expires": "2027-01-31"
+    },
+    {
+      "package": "@vitest/mocker",
+      "advisory": "GHSA-qxg6-89mg-rqv8",
+      "reason": "Development-only: unauthenticated manual-mock registration on the Vitest dev server, which the CI ratchet does not start. Fixed only by Vitest 5 (semver-major).",
+      "remediation": "Upgrade the root test runner to Vitest 5 in a dedicated change.",
+      "expires": "2027-01-31"
+    }
+  ]
+}
