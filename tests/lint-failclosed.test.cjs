@@ -43,8 +43,12 @@ test('CI invokes root lint as a blocking security job step', () => {
   assert.match(workflow, /- name: Lint code\s+run: npm run lint/);
   assert.doesNotMatch(workflow, /- name: Lint code\s+run: npm run lint\s+continue-on-error:\s*true/);
 });
-test('nested CLI lint target is currently missing and remains an unresolved CI blocker', () => {
-  assert.equal(cli.scripts.lint, undefined);
+// Previously pinned the absent nested lint target as an open CI blocker. The
+// CLI now has a real, enforcing ADR-078 lint gate (scripts/lint-adr078.mjs,
+// covered by tests/lint-adr078.test.cjs); it must not mask its own failures.
+test('nested CLI lint target is a real enforcing gate, not a no-op', () => {
+  assert.equal(cli.scripts.lint, 'node scripts/lint-adr078.mjs');
+  assert.doesNotMatch(cli.scripts.lint, /\|\|\s*true|;\s*exit\s+0|^\s*(true|echo\b)/);
 });
 test('a successful nested CLI invocation returns zero', () => assert.equal(simulate(command, 0), 0));
 test('a failed nested CLI invocation propagates nonzero', () => assert.equal(simulate(command, 17), 17));
