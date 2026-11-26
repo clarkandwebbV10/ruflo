@@ -1,0 +1,31 @@
+name: Rollback smoke-evidence gate
+
+on:
+  # Branch-scoped, read-only proof run for stacked security PRs whose
+  # pull_request checks have not appeared on their exact head SHA.
+  push:
+    branches:
+      - security/rollback-target-provenance-hold-20261120
+  pull_request:
+    paths:
+      - '.github/workflows/rollback-manager.yml'
+      - '.github/workflows/rollback-smoke-evidence-gate.yml'
+      - 'tests/rollback-smoke-verification.test.cjs'
+      - 'tests/rollback-dispatch-input-safety.test.cjs'
+      - 'tests/rollback-origin-gate.test.cjs'
+      - 'tests/rollback-target-provenance.test.cjs'
+      - 'tests/rollback-manual-approval-hold.test.cjs'
+      - 'package.json'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke-evidence-gate:
+    name: Regression — fail closed on rollback smoke/build failure
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify rollback smoke and build failure propagation without dependency install
+        run: node --test tests/rollback-smoke-verification.test.cjs tests/rollback-dispatch-input-safety.test.cjs tests/rollback-origin-gate.test.cjs tests/rollback-target-provenance.test.cjs tests/rollback-manual-approval-hold.test.cjs
