@@ -79,3 +79,20 @@ test('completed audit process reports remain subject to evidence validation', as
   assert.equal(evaluate({ full, prod, exceptions: [], today: '2026-11-26' }).ok, false);
   assert.equal(evaluate({ full: prod, prod, exceptions: [], today: '2026-11-26' }).ok, true);
 });
+
+test('impossible exception calendar dates cannot authorize a finding', async () => {
+  const { collectAdvisories, evaluate, validateExceptions } = await import('../scripts/audit-gate.mjs');
+  const full = collectAdvisories(report({ 'fixture-dependency': { severity: 'high', via: [advisory] } }));
+  const base = { package: 'fixture-dependency', advisory: 'GHSA-2222-3333-4444',
+    reason: 'Synthetic reviewed exception for testing.', remediation: 'Update dependency' };
+  for (const expires of ['2026-99-99', '2026-02-29', '2026-04-31', '2026-00-01']) {
+    const exceptions = [{ ...base, expires }];
+    assert.equal(validateExceptions(exceptions).length, 1);
+    assert.equal(evaluate({ full, prod: new Map(), exceptions, today: '2026-11-26' }).ok, false);
+  }
+  for (const expires of ['2026-12-01', '2028-02-29']) {
+    const exceptions = [{ ...base, expires }];
+    assert.equal(validateExceptions(exceptions).length, 0);
+    assert.equal(evaluate({ full, prod: new Map(), exceptions, today: '2026-11-26' }).ok, true);
+  }
+});
