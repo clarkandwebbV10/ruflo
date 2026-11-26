@@ -20,6 +20,7 @@ on:
       - '.claude/agents/dual-mode/**'
       - 'scripts/audit-codex-integration.mjs'
       - '.github/workflows/codex-integration-audit.yml'
+      - 'tests/codex-ci-security.test.cjs'
   pull_request:
     paths:
       - 'v3/@claude-flow/codex/**'
@@ -28,6 +29,10 @@ on:
       - '.claude/agents/dual-mode/**'
       - 'scripts/audit-codex-integration.mjs'
       - '.github/workflows/codex-integration-audit.yml'
+      - 'tests/codex-ci-security.test.cjs'
+
+permissions:
+  contents: read
 
 jobs:
   audit:
@@ -37,5 +42,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22.23.5'
+      - name: Verify Codex CI security configuration
+        run: node --test tests/codex-ci-security.test.cjs
       - run: node scripts/audit-codex-integration.mjs
