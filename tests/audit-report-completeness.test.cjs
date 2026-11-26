@@ -43,3 +43,21 @@ test('a valid transitive report retains its blocking high advisory', async () =>
   assert.equal(full.size, 1);
   assert.equal(evaluate({ full, prod: collectAdvisories(report()), exceptions: [], today: '2026-11-26' }).ok, false);
 });
+
+test('rejects a duplicated advisory with conflicting severity in either order', async () => {
+  const { collectAdvisories } = await import('../scripts/audit-gate.mjs');
+  const lower = { ...advisory, severity: 'low' };
+  for (const via of [[advisory, lower], [lower, advisory]]) {
+    assert.throws(() => collectAdvisories(report({
+      'fixture-dependency': { severity: 'high', via },
+    })), /conflicting npm audit advisory severities/);
+  }
+});
+test('identical advisory repetitions remain blocking and are deduplicated', async () => {
+  const { collectAdvisories, evaluate } = await import('../scripts/audit-gate.mjs');
+  const full = collectAdvisories(report({
+    'fixture-dependency': { severity: 'high', via: [advisory, { ...advisory }] },
+  }));
+  assert.equal(full.size, 1);
+  assert.equal(evaluate({ full, prod: collectAdvisories(report()), exceptions: [], today: '2026-11-26' }).ok, false);
+});
