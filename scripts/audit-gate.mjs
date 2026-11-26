@@ -29,6 +29,11 @@ const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const RANK = { info: 0, low: 1, moderate: 2, high: 3, critical: 4 };
 const GHSA_RE = /^GHSA(-[23456789cfghjmpqrvwx]{4}){3}$/;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const isCalendarDate = (value) => {
+  if (typeof value !== 'string' || !DATE_RE.test(value)) return false;
+  const date = new Date(`${value}T00:00:00.000Z`);
+  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
+};
 
 /** Advisories in a complete npm audit v2 report, keyed by `package GHSA`. */
 export function collectAdvisories(report) {
@@ -101,7 +106,7 @@ export function validateExceptions(list) {
     if (!e || !GHSA_RE.test(e.advisory ?? '')) problems.push(`${where}: advisory must be a GHSA id`);
     if (!e || typeof e.reason !== 'string' || e.reason.trim().length < 20) problems.push(`${where}: a substantive reason is required`);
     if (!e || typeof e.remediation !== 'string' || !e.remediation.trim()) problems.push(`${where}: remediation is required`);
-    if (!e || !DATE_RE.test(e.expires ?? '')) problems.push(`${where}: expires must be YYYY-MM-DD`);
+    if (!e || !isCalendarDate(e.expires)) problems.push(`${where}: expires must be a valid YYYY-MM-DD calendar date`);
     const key = e && `${e.package} ${e.advisory}`;
     if (key && seen.has(key)) problems.push(`${where}: duplicate exception ${key}`);
     if (key) seen.add(key);
