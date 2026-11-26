@@ -108,3 +108,28 @@ test('SEC-032 mutation proves removing fail-closed exit creates a false green', 
   assert.equal(runSummary('failure', 'success', 'skipped', statusScript).status, 1);
   assert.equal(runSummary('failure', 'success', 'skipped', weakened).status, 0);
 });
+
+
+// SEC-070: the consolidated stacked draft needs the same full CI gates as main PRs.
+function assertStackedCiCoverage(source) {
+  assert.match(source, /^  pull_request:\n    branches: \[ main, ccr-18d66c2d-kdr55m \]$/m);
+  assert.match(source, /^  push:\n    branches: \[ main, develop \]$/m);
+  assert.match(source, /^    if: github\.ref == 'refs\/heads\/main' && github\.event_name == 'push'$/m);
+  assert.doesNotMatch(source, /^\s*pull_request_target:/m);
+}
+
+test('SEC-070 full CI includes the stacked PR base without widening deployment', () => {
+  assertStackedCiCoverage(ciStatus);
+});
+
+test('SEC-070 rejects lost stack coverage and widened push/deploy triggers', () => {
+  for (const bad of [
+    ciStatus.replace('branches: [ main, ccr-18d66c2d-kdr55m ]', 'branches: [ main ]'),
+    ciStatus.replace('branches: [ main, develop ]', 'branches: [ main, develop, ccr-18d66c2d-kdr55m ]'),
+    ciStatus.replace(" && github.event_name == 'push'", ''),
+    ciStatus.replace('  pull_request:', '  pull_request_target:'),
+  ]) {
+    assert.notEqual(bad, ciStatus);
+    assert.throws(() => assertStackedCiCoverage(bad));
+  }
+});
