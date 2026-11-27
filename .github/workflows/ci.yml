@@ -4,7 +4,7 @@ on:
   push:
     branches: [ main, develop ]
   pull_request:
-    branches: [ main ]
+    branches: [ main, ccr-18d66c2d-kdr55m ]
   schedule:
     # Run tests daily at 2 AM UTC
     - cron: '0 2 * * *'

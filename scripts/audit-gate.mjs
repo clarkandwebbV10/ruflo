@@ -29,22 +29,71 @@ const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const RANK = { info: 0, low: 1, moderate: 2, high: 3, critical: 4 };
 const GHSA_RE = /^GHSA(-[23456789cfghjmpqrvwx]{4}){3}$/;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const isCalendarDate = (value) => {
+  if (typeof value !== 'string' || !DATE_RE.test(value)) return false;
+  const date = new Date(`${value}T00:00:00.000Z`);
+  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
+};
 
-/** Advisories in an `npm audit --json` report, keyed by `package GHSA`. */
+/** Advisories in a complete npm audit v2 report, keyed by `package GHSA`. */
 export function collectAdvisories(report) {
-  if (!report || typeof report !== 'object' || !report.metadata || typeof report.vulnerabilities !== 'object') {
-    throw new Error('not a valid npm audit --json report');
+  const isRecord = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
+  const severities = Object.keys(RANK);
+  const counts = report?.metadata?.vulnerabilities;
+  if (!isRecord(report) || report.auditReportVersion !== 2 || report.error ||
+      !isRecord(report.vulnerabilities) || !isRecord(counts)) {
+    throw new Error('not a valid npm audit --json v2 report');
   }
+  const actual = Object.fromEntries(severities.map((s) => [s, 0]));
+  const entries = Object.entries(report.vulnerabilities);
   const found = new Map();
-  for (const entry of Object.values(report.vulnerabilities)) {
-    for (const via of entry.via ?? []) {
-      if (!via || typeof via !== 'object') continue; // string = transitive pointer
-      const advisory = String(via.url ?? '').split('/').pop();
+  const links = new Map();
+  const direct = new Set();
+  for (const [name, entry] of entries) {
+    if (!isRecord(entry) || !Object.hasOwn(RANK, entry.severity) ||
+        !Array.isArray(entry.via) || entry.via.length === 0) {
+      throw new Error('malformed npm audit vulnerability entry');
+    }
+    actual[entry.severity] += 1;
+    links.set(name, []);
+    for (const via of entry.via) {
+      if (typeof via === 'string') {
+        if (!Object.hasOwn(report.vulnerabilities, via)) throw new Error('unresolved npm audit transitive pointer');
+        links.get(name).push(via);
+        continue;
+      }
+      if (!isRecord(via) || typeof via.url !== 'string' ||
+          !Object.hasOwn(RANK, via.severity)) {
+        throw new Error('malformed npm audit advisory');
+      }
+      const advisory = via.url.split('/').pop();
       const pkg = via.name ?? via.dependency;
-      if (!pkg || !advisory) continue;
-      found.set(`${pkg} ${advisory}`, { package: pkg, advisory, severity: via.severity, title: via.title ?? '' });
+      if (typeof pkg !== 'string' || !pkg.trim() || !advisory) throw new Error('incomplete npm audit advisory');
+      direct.add(name);
+      const key = `${pkg} ${advisory}`;
+      const previous = found.get(key);
+      if (previous && previous.severity !== via.severity) {
+        throw new Error('conflicting npm audit advisory severities');
+      }
+      found.set(key, { package: pkg, advisory, severity: via.severity, title: via.title ?? '' });
     }
   }
+  for (const severity of severities) {
+    if (counts[severity] !== actual[severity]) throw new Error('npm audit severity counts do not match entries');
+  }
+  if (counts.total !== entries.length) throw new Error('npm audit total does not match entries');
+  // A transitive-only component without any concrete advisory is not evidence.
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const [name, dependencies] of links) {
+      if (!direct.has(name) && dependencies.some((dependency) => direct.has(dependency))) {
+        direct.add(name);
+        changed = true;
+      }
+    }
+  }
+  if (direct.size !== entries.length) throw new Error('npm audit entry has no concrete advisory');
   return found;
 }
 
@@ -57,7 +106,7 @@ export function validateExceptions(list) {
     if (!e || !GHSA_RE.test(e.advisory ?? '')) problems.push(`${where}: advisory must be a GHSA id`);
     if (!e || typeof e.reason !== 'string' || e.reason.trim().length < 20) problems.push(`${where}: a substantive reason is required`);
     if (!e || typeof e.remediation !== 'string' || !e.remediation.trim()) problems.push(`${where}: remediation is required`);
-    if (!e || !DATE_RE.test(e.expires ?? '')) problems.push(`${where}: expires must be YYYY-MM-DD`);
+    if (!e || !isCalendarDate(e.expires)) problems.push(`${where}: expires must be a valid YYYY-MM-DD calendar date`);
     const key = e && `${e.package} ${e.advisory}`;
     if (key && seen.has(key)) problems.push(`${where}: duplicate exception ${key}`);
     if (key) seen.add(key);
@@ -88,8 +137,16 @@ function runAudit(omitDev) {
   const run = spawnSync(process.platform === 'win32' ? 'npm.cmd' : 'npm', args, {
     cwd: REPO_ROOT, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, shell: process.platform === 'win32',
   });
+  return parseAuditRun(run);
+}
+
+/** A terminated or failed subprocess is not a completed audit. */
+export function parseAuditRun(run) {
   if (run.error) throw run.error;
-  // npm audit exits 1 when it finds advisories; the JSON report is what counts.
+  if (run.signal || (run.status !== 0 && run.status !== 1)) {
+    throw new Error('npm audit did not complete with an expected exit status');
+  }
+  // npm audit exits 1 when it finds advisories; still validate the JSON report.
   return JSON.parse(run.stdout);
 }
 
